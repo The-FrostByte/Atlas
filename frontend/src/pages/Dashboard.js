@@ -8,7 +8,8 @@ import {
 import {
   AlertCircle, Users, ClipboardList, AlertTriangle,
   Search, Calendar, ChevronDown, X,
-  CheckCircle2, Loader2, Clock, TrendingUp
+  CheckCircle2, Loader2, Clock, TrendingUp,
+  Building2, UserCircle, LayoutDashboard
 } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -30,6 +31,14 @@ const PILL_COLORS = {
   pending: 'bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-400'
 };
 
+// ─── RBAC scope label config ──────────────────────────────────────────────────
+// Per RBAC docs section 13: Dashboard header must show scope being displayed.
+const SCOPE_CONFIG = {
+  admin: { label: 'All Departments', icon: Building2, color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/20' },
+  manager: { label: 'Your Department & Tasks', icon: Building2, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20' },
+  member: { label: 'Your Tasks', icon: UserCircle, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-500/10 border-slate-200 dark:border-slate-500/20' },
+};
+
 // ─── Preset Filters ───────────────────────────────────────────────────────────
 const PRESET_FILTERS = [
   { key: 'all', label: 'All Time' },
@@ -41,28 +50,41 @@ const PRESET_FILTERS = [
 
 function getDateRangeForPreset(key) {
   if (key === 'all' || key === 'custom') return { start_date: null, end_date: null };
-  const now = new Date();
-  const end = new Date(now); end.setHours(23, 59, 59, 999);
-  const start = new Date(now);
-  start.setDate(start.getDate() - (parseInt(key) - 1));
-  start.setHours(0, 0, 0, 0);
+  const now = new Date(); const end = new Date(now); end.setHours(23, 59, 59, 999);
+  const start = new Date(now); start.setDate(start.getDate() - (parseInt(key) - 1)); start.setHours(0, 0, 0, 0);
   return { start_date: start.toISOString(), end_date: end.toISOString() };
 }
 
 // ─── Animated Counter Hook ────────────────────────────────────────────────────
 function useAnimatedCount(target, duration = 600) {
   const [count, setCount] = useState(0);
+  const prevTarget = useRef(0);
   const frameRef = useRef(null);
 
   useEffect(() => {
     if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    const startValue = prevTarget.current;
+    const diff = target - startValue;
+
+    // If the number hasn't changed, don't run the animation loop
+    if (diff === 0) {
+      setCount(target);
+      return;
+    }
+
     const start = performance.now();
     const tick = (now) => {
       const progress = Math.min((now - start) / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setCount(Math.round(target * eased));
-      if (progress < 1) frameRef.current = requestAnimationFrame(tick);
+      setCount(Math.round(startValue + (diff * eased)));
+
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(tick);
+      } else {
+        prevTarget.current = target; // Update previous target when done
+      }
     };
+
     frameRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameRef.current);
   }, [target, duration]);
@@ -71,24 +93,16 @@ function useAnimatedCount(target, duration = 600) {
 }
 
 // ─── Skeleton Components ──────────────────────────────────────────────────────
-const SkeletonBox = ({ className = '' }) => (
-  <div className={`animate-pulse bg-muted/60 rounded-lg ${className}`} />
-);
-
+const SkeletonBox = ({ className = '' }) => <div className={`animate-pulse bg-muted/60 rounded-lg ${className}`} />;
 const SkeletonCard = ({ tall = false }) => (
   <Card className="p-6 border-border/50">
     <div className="flex items-center justify-between">
-      <div className="space-y-2 flex-1">
-        <SkeletonBox className="h-3 w-24" />
-        <SkeletonBox className="h-8 w-16" />
-        <SkeletonBox className="h-2.5 w-32 mt-1" />
-      </div>
+      <div className="space-y-2 flex-1"><SkeletonBox className="h-3 w-24" /><SkeletonBox className="h-8 w-16" /></div>
       <SkeletonBox className="h-12 w-12 rounded-full" />
     </div>
     {tall && <SkeletonBox className="h-1.5 w-full mt-5 rounded-full" />}
   </Card>
 );
-
 const SkeletonChart = ({ height = 320 }) => (
   <Card className="p-6 border-border/50">
     <SkeletonBox className="h-5 w-40 mb-6" />
@@ -96,14 +110,12 @@ const SkeletonChart = ({ height = 320 }) => (
   </Card>
 );
 
-// ─── Meta Card (Total Tasks / Active Members) ─────────────────────────────────
+// ─── Meta Card ────────────────────────────────────────────────────────────────
 function MetaCard({ label, value, icon: Icon, iconBg, iconColor, onClick, subtitle }) {
   const animated = useAnimatedCount(value);
   return (
-    <Card
-      onClick={onClick}
-      className={`p-6 border-border/50 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${onClick ? 'cursor-pointer' : ''}`}
-    >
+    <Card onClick={onClick}
+      className={`p-6 border-border/50 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${onClick ? 'cursor-pointer' : ''}`}>
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
@@ -118,16 +130,13 @@ function MetaCard({ label, value, icon: Icon, iconBg, iconColor, onClick, subtit
   );
 }
 
-// ─── Status Card (Completed / In Progress / Pending / Overdue) ───────────────
+// ─── Status Card ─────────────────────────────────────────────────────────────
 function StatusCard({ label, value, total, icon: Icon, iconBg, iconColor, accentColor, subtitle }) {
   const animated = useAnimatedCount(value);
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-
   return (
     <Card className="relative p-5 border-border/50 overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-      {/* Colored top strip */}
       <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ backgroundColor: accentColor }} />
-
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
@@ -137,32 +146,22 @@ function StatusCard({ label, value, total, icon: Icon, iconBg, iconColor, accent
           <Icon className={`h-4.5 w-4.5 ${iconColor}`} style={{ height: '1.1rem', width: '1.1rem' }} />
         </div>
       </div>
-
-      {subtitle && (
-        <p className="text-[11px] text-muted-foreground mt-1.5">{subtitle}</p>
-      )}
-
-      {/* % of total bar */}
+      {subtitle && <p className="text-[11px] text-muted-foreground mt-1.5">{subtitle}</p>}
       <div className="mt-4 space-y-1.5">
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-muted-foreground">% of total</span>
           <span className="text-[11px] font-bold" style={{ color: accentColor }}>{pct}%</span>
         </div>
         <div className="h-1.5 w-full bg-muted/50 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
-            className="h-full rounded-full"
-            style={{ backgroundColor: accentColor }}
-          />
+          <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="h-full rounded-full" style={{ backgroundColor: accentColor }} />
         </div>
       </div>
     </Card>
   );
 }
 
-// ─── Pipeline Health Bar ──────────────────────────────────────────────────────
+// ─── Pipeline Bar ─────────────────────────────────────────────────────────────
 function PipelineBar({ completed, inProgress, pending, overdue, total }) {
   if (!total) return null;
   const segments = [
@@ -171,31 +170,24 @@ function PipelineBar({ completed, inProgress, pending, overdue, total }) {
     { label: 'Pending', value: pending, color: COLORS.pending },
     { label: 'Overdue', value: overdue, color: COLORS.overdue },
   ].filter(s => s.value > 0);
-
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <TrendingUp className="h-3.5 w-3.5" />
-          Pipeline Health
+          <TrendingUp className="h-3.5 w-3.5" />Pipeline Health
         </p>
         <p className="text-xs text-muted-foreground">{total} total tasks</p>
       </div>
       <div className="flex h-2.5 rounded-full overflow-hidden gap-px bg-muted/30">
-        {segments.map((seg) => (
-          <motion.div
-            key={seg.label}
-            initial={{ flex: 0 }}
-            animate={{ flex: seg.value / total }}
-            transition={{ duration: 0.8, ease: 'easeOut' }}
+        {segments.map(seg => (
+          <motion.div key={seg.label}
+            initial={{ flex: 0 }} animate={{ flex: seg.value / total }} transition={{ duration: 0.8, ease: 'easeOut' }}
             title={`${seg.label}: ${seg.value} (${Math.round((seg.value / total) * 100)}%)`}
-            className="h-full"
-            style={{ backgroundColor: seg.color, minWidth: seg.value > 0 ? '2px' : 0 }}
-          />
+            className="h-full" style={{ backgroundColor: seg.color, minWidth: seg.value > 0 ? '2px' : 0 }} />
         ))}
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {segments.map((seg) => (
+        {segments.map(seg => (
           <div key={seg.label} className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: seg.color }} />
             <span className="text-[11px] text-muted-foreground">
@@ -216,9 +208,7 @@ function DateFilterBar({ activeFilter, onFilterChange, customRange, onCustomRang
   const customRef = useRef(null);
 
   useEffect(() => {
-    const handler = (e) => {
-      if (customRef.current && !customRef.current.contains(e.target)) setShowCustom(false);
-    };
+    const handler = (e) => { if (customRef.current && !customRef.current.contains(e.target)) setShowCustom(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
@@ -234,105 +224,95 @@ function DateFilterBar({ activeFilter, onFilterChange, customRange, onCustomRang
 
   const handlePresetClick = (key) => {
     if (key === 'custom') { setShowCustom(p => !p); onFilterChange(key); return; }
-    setShowCustom(false);
-    onFilterChange(key);
+    setShowCustom(false); onFilterChange(key);
   };
 
   const customDisplayLabel = customRange.start && customRange.end
     ? `${customRange.start} → ${customRange.end}` : 'Custom Range';
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50">
-        {PRESET_FILTERS.filter(f => f.key !== 'custom').map((filter) => (
-          <button
-            key={filter.key}
-            onClick={() => handlePresetClick(filter.key)}
-            className={`relative px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200
-              ${activeFilter === filter.key
-                ? 'bg-background text-foreground shadow-sm border border-border/60'
-                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-              }`}
-          >
-            {filter.label}
+    // 1. Changed outer container to a column and aligned it to the end (right side)
+    <div className="flex flex-col sm:items-end gap-2">
+
+      {/* 2. Wrapped the buttons in their own flex row */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50">
+          {PRESET_FILTERS.filter(f => f.key !== 'custom').map(filter => (
+            <button key={filter.key} onClick={() => handlePresetClick(filter.key)}
+              className={`relative px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${activeFilter === filter.key ? 'bg-background text-foreground shadow-sm border border-border/60' : 'text-muted-foreground hover:text-foreground hover:bg-background/50'}`}>
+              {filter.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative" ref={customRef}>
+          <button onClick={() => handlePresetClick('custom')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 ${activeFilter === 'custom' ? 'bg-background text-foreground border-primary/30 shadow-sm' : 'text-muted-foreground border-border/50 hover:text-foreground hover:border-border hover:bg-muted/40'}`}>
+            <Calendar className="h-3.5 w-3.5" />
+            {activeFilter === 'custom' && customRange.start ? customDisplayLabel : 'Custom Range'}
+            <ChevronDown className={`h-3 w-3 transition-transform ${showCustom ? 'rotate-180' : ''}`} />
           </button>
-        ))}
+          <AnimatePresence>
+            {showCustom && (
+              <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.15 }}
+                className="absolute top-full mt-2 right-0 z-50 bg-background border border-border rounded-xl shadow-xl p-4 min-w-[280px]">
+                <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-primary" />Select Date Range
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium block mb-1">Start Date</label>
+                    <input type="date" value={localStart} max={localEnd || undefined} onChange={e => setLocalStart(e.target.value)}
+                      className="w-full text-sm bg-muted/40 border border-border/60 rounded-md px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium block mb-1">End Date</label>
+                    <input type="date" value={localEnd} min={localStart || undefined} onChange={e => setLocalEnd(e.target.value)}
+                      className="w-full text-sm bg-muted/40 border border-border/60 rounded-md px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all" />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={handleApply} disabled={!localStart || !localEnd}
+                    className="flex-1 px-3 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                    Apply Range
+                  </button>
+                  <button onClick={() => { setLocalStart(''); setLocalEnd(''); setShowCustom(false); onFilterChange('all'); }}
+                    className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground border border-border/50 rounded-md hover:bg-muted/40 transition-all">
+                    Clear
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
-      <div className="relative" ref={customRef}>
-        <button
-          onClick={() => handlePresetClick('custom')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200
-            ${activeFilter === 'custom'
-              ? 'bg-background text-foreground border-primary/30 shadow-sm'
-              : 'text-muted-foreground border-border/50 hover:text-foreground hover:border-border hover:bg-muted/40'
-            }`}
-        >
-          <Calendar className="h-3.5 w-3.5" />
-          {activeFilter === 'custom' && customRange.start ? customDisplayLabel : 'Custom Range'}
-          <ChevronDown className={`h-3 w-3 transition-transform ${showCustom ? 'rotate-180' : ''}`} />
-        </button>
-
+      {/* 3. The Active Badge is now pulled outside the row, sitting cleanly underneath */}
+      <div className="h-6 self-start sm:self-end">
         <AnimatePresence>
-          {showCustom && (
+          {activeFilter !== 'all' && (
             <motion.div
-              initial={{ opacity: 0, y: -6, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.97 }}
-              transition={{ duration: 0.15 }}
-              className="absolute top-full mt-2 right-0 z-50 bg-background border border-border rounded-xl shadow-xl p-4 min-w-[280px]"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="inline-flex w-fit items-center gap-1.5 px-2.5 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full border border-primary/20"
             >
-              <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5 text-primary" />
-                Select Date Range
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium block mb-1">Start Date</label>
-                  <input type="date" value={localStart} max={localEnd || undefined}
-                    onChange={(e) => setLocalStart(e.target.value)}
-                    className="w-full text-sm bg-muted/40 border border-border/60 rounded-md px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all" />
-                </div>
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium block mb-1">End Date</label>
-                  <input type="date" value={localEnd} min={localStart || undefined}
-                    onChange={(e) => setLocalEnd(e.target.value)}
-                    className="w-full text-sm bg-muted/40 border border-border/60 rounded-md px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all" />
-                </div>
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button onClick={handleApply} disabled={!localStart || !localEnd}
-                  className="flex-1 px-3 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-                  Apply Range
-                </button>
-                <button onClick={() => { setLocalStart(''); setLocalEnd(''); setShowCustom(false); onFilterChange('all'); }}
-                  className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground border border-border/50 rounded-md hover:bg-muted/40 transition-all">
-                  Clear
-                </button>
-              </div>
+              <span>{activeFilter === 'custom' ? customDisplayLabel : PRESET_FILTERS.find(f => f.key === activeFilter)?.label}</span>
+              <button onClick={() => { onFilterChange('all'); onCustomRangeChange({ start: '', end: '' }); }}
+                className="hover:text-primary/70 transition-colors"><X className="h-3 w-3" />
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-
-      {activeFilter !== 'all' && (
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-          className="flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full border border-primary/20">
-          <span>{activeFilter === 'custom' ? customDisplayLabel : PRESET_FILTERS.find(f => f.key === activeFilter)?.label}</span>
-          <button onClick={() => { onFilterChange('all'); onCustomRangeChange({ start: '', end: '' }); }}
-            className="hover:text-primary/70 transition-colors">
-            <X className="h-3 w-3" />
-          </button>
-        </motion.div>
-      )}
     </div>
   );
 }
 
-// ─── Custom Tooltip ───────────────────────────────────────────────────────────
+// ─── Tooltips & helpers ───────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label, type, pieData }) => {
   if (!active || !payload?.length) return null;
-
   if (type === 'bar') {
     return (
       <div className="bg-background/95 backdrop-blur p-3 rounded-lg shadow-xl border border-border text-sm">
@@ -352,7 +332,6 @@ const CustomTooltip = ({ active, payload, label, type, pieData }) => {
       </div>
     );
   }
-
   if (type === 'pie') {
     return (
       <div className="bg-background/95 backdrop-blur p-4 rounded-lg shadow-xl border border-border text-sm min-w-[200px]">
@@ -379,7 +358,6 @@ const CustomTooltip = ({ active, payload, label, type, pieData }) => {
       </div>
     );
   }
-
   if (type === 'employee') {
     const data = payload[0]?.payload;
     if (!data) return null;
@@ -388,23 +366,16 @@ const CustomTooltip = ({ active, payload, label, type, pieData }) => {
         <p className="font-bold text-foreground mb-1">{data.name}</p>
         <p className="text-xs text-muted-foreground mb-3 pb-2 border-b border-border">{data.department}</p>
         <div className="space-y-2">
-          {[
-            { label: 'Completed', val: data.completed, cls: 'text-emerald-600 dark:text-emerald-400' },
-            { label: 'In Progress', val: data.in_progress, cls: 'text-blue-600 dark:text-blue-400' },
-            { label: 'Pending', val: data.pending, cls: 'text-muted-foreground' },
-            { label: 'Overdue', val: data.overdue, cls: 'text-red-600 dark:text-red-400' },
-          ].map(({ label, val, cls }) => (
-            <div key={label} className="flex justify-between items-center">
-              <span className={cls}>{label}:</span>
-              <span className={`font-semibold ${label === 'Overdue' ? cls : ''}`}>{val}</span>
+          {[['text-emerald-600 dark:text-emerald-400', 'Completed', data.completed], ['text-blue-600 dark:text-blue-400', 'In Progress', data.in_progress], ['text-muted-foreground', 'Pending', data.pending], ['text-red-600 dark:text-red-400', 'Overdue', data.overdue]].map(([cls, lbl, val]) => (
+            <div key={lbl} className="flex justify-between items-center">
+              <span className={cls}>{lbl}:</span>
+              <span className={`font-semibold ${lbl === 'Overdue' ? cls : ''}`}>{val}</span>
             </div>
           ))}
           <div className="border-t border-border pt-2 mt-2">
             <div className="flex justify-between items-center">
               <span className="font-medium text-foreground">On-Time Rate:</span>
-              <span className={`font-bold ${data.on_time_rate >= 80 ? 'text-emerald-500' : data.on_time_rate >= 50 ? 'text-amber-500' : 'text-red-500'}`}>
-                {data.on_time_rate}%
-              </span>
+              <span className={`font-bold ${data.on_time_rate >= 80 ? 'text-emerald-500' : data.on_time_rate >= 50 ? 'text-amber-500' : 'text-red-500'}`}>{data.on_time_rate}%</span>
             </div>
           </div>
         </div>
@@ -414,7 +385,6 @@ const CustomTooltip = ({ active, payload, label, type, pieData }) => {
   return null;
 };
 
-// ─── Dominant % Label ─────────────────────────────────────────────────────────
 const DominantPercentageLabel = (props) => {
   const { cx, cy, payload } = props;
   if (!payload?.chartTotal) return null;
@@ -426,27 +396,16 @@ const DominantPercentageLabel = (props) => {
   ].sort((a, b) => b.value - a.value);
   const dominant = categories[0];
   if (!dominant.value) return null;
-  return (
-    <text x={cx} y={cy - 10} fill={dominant.color} textAnchor="middle" fontSize={12} fontWeight="bold">
-      {Math.round((dominant.value / payload.chartTotal) * 100)}%
-    </text>
-  );
+  return <text x={cx} y={cy - 10} fill={dominant.color} textAnchor="middle" fontSize={12} fontWeight="bold">{Math.round((dominant.value / payload.chartTotal) * 100)}%</text>;
 };
 
-// ─── Stat Cell (table) ────────────────────────────────────────────────────────
 const StatCell = ({ value, colorClass }) => (
   <div className="flex items-center justify-center">
-    {value ? (
-      <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold ${colorClass}`}>
-        {value}
-      </span>
-    ) : (
-      <span className="text-muted-foreground/50 font-medium">0</span>
-    )}
+    {value ? <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold ${colorClass}`}>{value}</span>
+      : <span className="text-muted-foreground/50 font-medium">0</span>}
   </div>
 );
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
 const EmptyChartState = () => (
   <div className="h-full flex flex-col items-center justify-center gap-2 text-center py-12">
     <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center">
@@ -457,26 +416,17 @@ const EmptyChartState = () => (
   </div>
 );
 
-// ─── Motion Variants ──────────────────────────────────────────────────────────
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.07 } }
-};
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } }
-};
+const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.07 } } };
+const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } };
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard({ user }) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [employeeSearch, setEmployeeSearch] = useState('');
-
   const [activeFilter, setActiveFilter] = useState('all');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const [activeDateRange, setActiveDateRange] = useState({ start_date: null, end_date: null });
-
   const [stats, setStats] = useState({
     summary: { total_tasks: 0, overdue_tasks: 0, total_users: 0 },
     statusData: [],
@@ -513,8 +463,7 @@ export default function Dashboard({ user }) {
         summary: statsRes.data.summary || {},
         statusData: (statsRes.data.status_distribution || []).map(item => ({
           name: item._id ? item._id.charAt(0).toUpperCase() + item._id.slice(1).replace('_', ' ') : 'Unknown',
-          value: item.count || 0,
-          color: COLORS[item._id] || COLORS.pending
+          value: item.count || 0, color: COLORS[item._id] || COLORS.pending
         })),
         departmentData: (statsRes.data.department_performance || []).map(item => ({
           name: item.name || 'Unassigned',
@@ -541,7 +490,6 @@ export default function Dashboard({ user }) {
   };
   const handleCustomApply = (start_date, end_date) => setActiveDateRange({ start_date, end_date });
 
-  // Derived counts
   const getStatusCount = (key) =>
     stats.statusData.find(s => s.name.toLowerCase().replace(' ', '_') === key)?.value || 0;
 
@@ -564,35 +512,25 @@ export default function Dashboard({ user }) {
   const hasDeptData = stats.departmentData.some(d => d.completed + d.in_progress + d.pending + d.overdue > 0);
   const hasEmpData = stats.employeeData.length > 0;
 
-  // ── Skeleton on first load ───────────────────────────────────────────────
+  // ── Scope config for this user ───────────────────────────────────────────
+  const scope = SCOPE_CONFIG[user?.role] || SCOPE_CONFIG.member;
+  const ScopeIcon = scope.icon;
+
   if (loading && totalTasks === 0) {
     return (
-     
-        <div className="space-y-8 max-w-7xl mx-auto">
-          <div className="flex flex-col gap-2">
-            <SkeletonBox className="h-9 w-72" />
-            <SkeletonBox className="h-4 w-56" />
-          </div>
-          {/* meta row */}
-          <div className="grid sm:grid-cols-2 gap-4">
-            <SkeletonCard /><SkeletonCard />
-          </div>
-          {/* status row */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <SkeletonCard tall /><SkeletonCard tall /><SkeletonCard tall /><SkeletonCard tall />
-          </div>
-          <SkeletonBox className="h-10 w-full rounded-xl" />
-          <div className="grid lg:grid-cols-3 gap-6">
-            <SkeletonChart /><div className="lg:col-span-2"><SkeletonChart /></div>
-          </div>
-        </div>
-  
+      <div className="space-y-8 max-w-7xl mx-auto">
+        <div className="flex flex-col gap-2"><SkeletonBox className="h-9 w-72" /><SkeletonBox className="h-4 w-56" /></div>
+        <div className="grid sm:grid-cols-2 gap-4"><SkeletonCard /><SkeletonCard /></div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{[...Array(4)].map((_, i) => <SkeletonCard key={i} tall />)}</div>
+        <SkeletonBox className="h-10 w-full rounded-xl" />
+        <div className="grid lg:grid-cols-3 gap-6"><SkeletonChart /><div className="lg:col-span-2"><SkeletonChart /></div></div>
+      </div>
     );
   }
 
   return (
-    <div>
-      {/* Top progress bar for re-fetches */}
+    <>
+      {/* Top progress bar moved OUTSIDE the space-y-8 container */}
       <AnimatePresence>
         {loading && (
           <motion.div key="bar" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} exit={{ opacity: 0 }}
@@ -602,139 +540,90 @@ export default function Dashboard({ user }) {
       </AnimatePresence>
 
       <motion.div className="space-y-8 max-w-7xl mx-auto" variants={containerVariants} initial="hidden" animate="visible">
-
-        {/* HEADER ─────────────────────────────────────────────────────────── */}
+        {/* HEADER */}
         <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Operations Dashboard</h1>
-            <p className="text-muted-foreground">
-              Welcome back, <span className="font-medium text-foreground">{user?.name}</span>. Here's a snapshot of current progress.
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-muted-foreground">
+                Welcome back, <span className="font-medium text-foreground">{user?.name}</span>.
+              </p>
+              {/* ── RBAC scope label — Section 13 of docs ── */}
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${scope.bg}`}>
+                <ScopeIcon className={`h-3 w-3 ${scope.color}`} />
+                <span className={scope.color}>{scope.label}</span>
+              </div>
+            </div>
           </div>
           <div className="shrink-0">
-            <DateFilterBar
-              activeFilter={activeFilter}
-              onFilterChange={handleFilterChange}
-              customRange={customRange}
-              onCustomRangeChange={setCustomRange}
-              onCustomApply={handleCustomApply}
-            />
+            <DateFilterBar activeFilter={activeFilter} onFilterChange={handleFilterChange}
+              customRange={customRange} onCustomRangeChange={setCustomRange} onCustomApply={handleCustomApply} />
           </div>
         </motion.div>
 
-        {/* ROW 1 — Meta stats (2 wide cards) ─────────────────────────────── */}
+        {/* ROW 1 — Meta cards */}
         <motion.div variants={itemVariants} className="grid sm:grid-cols-2 gap-4">
-          <MetaCard
-            label="Total Tasks"
-            value={totalTasks}
-            icon={ClipboardList}
-            iconBg="bg-primary/10"
-            iconColor="text-primary"
-            subtitle="All tasks across the organisation"
-            onClick={() => navigate('/tasks')}
-          />
-          <MetaCard
-            label="Active Members"
-            value={totalUsers}
-            icon={Users}
-            iconBg="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-            subtitle="Team members currently active"
-          />
+          <MetaCard label="Total Tasks" value={totalTasks} icon={ClipboardList}
+            iconBg="bg-primary/10" iconColor="text-primary"
+            subtitle="All tasks in scope" onClick={() => navigate('/tasks')} />
+          <MetaCard label="Active Members" value={totalUsers} icon={Users}
+            iconBg="bg-emerald-500/10" iconColor="text-emerald-500"
+            subtitle="Members in your department"
+            onClick={() => navigate('/users')} />
         </motion.div>
 
-        {/* ROW 2 — Status breakdown (4 equal cards) ──────────────────────── */}
+        {/* ROW 2 — Status cards */}
         <motion.div variants={itemVariants} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatusCard
-            label="Completed"
-            value={completedCount}
-            total={totalTasks}
-            icon={CheckCircle2}
-            iconBg="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-            accentColor={COLORS.completed}
-            subtitle="Finished on time"
-          />
-          <StatusCard
-            label="In Progress"
-            value={inProgressCount}
-            total={totalTasks}
-            icon={Loader2}
-            iconBg="bg-blue-500/10"
-            iconColor="text-blue-500"
-            accentColor={COLORS.in_progress}
-            subtitle="Currently active"
-          />
-          <StatusCard
-            label="Pending"
-            value={pendingCount}
-            total={totalTasks}
-            icon={Clock}
-            iconBg="bg-slate-500/10"
-            iconColor="text-slate-400"
-            accentColor={COLORS.pending}
-            subtitle="Awaiting action"
-          />
-          <StatusCard
-            label="Overdue"
-            value={overdueCount}
-            total={totalTasks}
-            icon={AlertCircle}
-            iconBg="bg-red-500/10"
-            iconColor="text-red-500"
-            accentColor={COLORS.overdue}
-            subtitle="Needs immediate attention"
-          />
+          <StatusCard label="Completed" value={completedCount} total={totalTasks} icon={CheckCircle2} iconBg="bg-emerald-500/10" iconColor="text-emerald-500" accentColor={COLORS.completed} subtitle="Finished on time" />
+          <StatusCard label="In Progress" value={inProgressCount} total={totalTasks} icon={Loader2} iconBg="bg-blue-500/10" iconColor="text-blue-500" accentColor={COLORS.in_progress} subtitle="Currently active" />
+          <StatusCard label="Pending" value={pendingCount} total={totalTasks} icon={Clock} iconBg="bg-slate-500/10" iconColor="text-slate-400" accentColor={COLORS.pending} subtitle="Awaiting action" />
+          <StatusCard label="Overdue" value={overdueCount} total={totalTasks} icon={AlertCircle} iconBg="bg-red-500/10" iconColor="text-red-500" accentColor={COLORS.overdue} subtitle="Needs immediate attention" />
         </motion.div>
 
-        {/* PIPELINE HEALTH BAR ────────────────────────────────────────────── */}
+        {/* Pipeline bar */}
         {totalTasks > 0 && (
           <motion.div variants={itemVariants}>
             <Card className="px-6 py-5 border-border/50">
-              <PipelineBar
-                completed={completedCount}
-                inProgress={inProgressCount}
-                pending={pendingCount}
-                overdue={overdueCount}
-                total={totalTasks}
-              />
+              <PipelineBar completed={completedCount} inProgress={inProgressCount}
+                pending={pendingCount} overdue={overdueCount} total={totalTasks} />
             </Card>
           </motion.div>
         )}
 
-        {/* CHARTS ─────────────────────────────────────────────────────────── */}
-        <motion.div variants={itemVariants} className="grid lg:grid-cols-3 gap-6">
-          <Card className="p-6 flex flex-col border-border/50 lg:col-span-1 overflow-hidden">
+        {/* Charts */}
+        <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="p-4 sm:p-6 flex flex-col border-border/50 lg:col-span-1 overflow-hidden">
             <h3 className="font-semibold text-lg text-foreground mb-4">Status Distribution</h3>
             {hasChartData ? (
-              <div className="h-[320px] w-full pb-4 [&_*]:outline-none">
-                <ResponsiveContainer width="100%" height={320}>
+              <div className="h-[260px] sm:h-[320px] w-full pb-4 [&_*]:outline-none">
+                <ResponsiveContainer width="100%" height="100%">
                   <PieChart margin={{ bottom: 20 }}>
-                    <Pie data={stats.statusData} dataKey="value" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={3} stroke="none">
+                    <Pie data={stats.statusData} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={75} paddingAngle={3} stroke="none">
                       {stats.statusData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                     </Pie>
                     <Tooltip content={<CustomTooltip type="pie" pieData={stats.statusData} />} />
                     <Legend payload={customLegendPayload} verticalAlign="bottom" wrapperStyle={{ paddingTop: '20px' }}
-                      formatter={(v) => <span className="text-sm font-medium text-muted-foreground capitalize mx-1.5">{v}</span>} />
+                      formatter={(v) => <span className="text-xs sm:text-sm font-medium text-muted-foreground capitalize mx-1">{v}</span>} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-            ) : (
-              <div className="h-[320px]"><EmptyChartState /></div>
-            )}
+            ) : <div className="h-[260px] sm:h-[320px]"><EmptyChartState /></div>}
           </Card>
 
-          <Card className="p-6 flex flex-col border-border/50 lg:col-span-2 overflow-hidden">
+          <Card className="p-4 sm:p-6 flex flex-col border-border/50 lg:col-span-2 overflow-hidden">
             <h3 className="font-semibold text-lg text-foreground mb-4">Department Load</h3>
             {hasDeptData ? (
-              <div className="h-[320px] w-full [&_*]:outline-none">
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={stats.departmentData} margin={{ top: 30, right: 10, left: -20, bottom: 20 }}>
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} dy={12} />
-                    <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+              <div className="h-[260px] sm:h-[320px] w-full [&_*]:outline-none">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stats.departmentData} margin={{ top: 20, right: 5, left: -15, bottom: 20 }}>
+                    <XAxis dataKey="name" axisLine={false} tickLine={false}
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} dy={10}
+                      interval={0} />
+                    <YAxis allowDecimals={false} axisLine={false} tickLine={false}
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} width={35} />
                     <Tooltip cursor={{ fill: 'rgba(148,163,184,0.1)' }} content={<CustomTooltip type="bar" />} />
-                    <Legend payload={customLegendPayload} verticalAlign="bottom" wrapperStyle={{ paddingTop: '20px' }}
-                      formatter={(v) => <span className="text-sm font-medium text-muted-foreground capitalize mx-1.5">{v}</span>} />
+                    <Legend payload={customLegendPayload} verticalAlign="bottom" wrapperStyle={{ paddingTop: '16px' }}
+                      formatter={(v) => <span className="text-xs font-medium text-muted-foreground capitalize mx-1">{v}</span>} />
                     <Bar dataKey="completed" name="Completed" stackId="a" fill={COLORS.completed} />
                     <Bar dataKey="in_progress" name="In Progress" stackId="a" fill={COLORS.in_progress} />
                     <Bar dataKey="pending" name="Pending" stackId="a" fill={COLORS.pending} />
@@ -742,83 +631,80 @@ export default function Dashboard({ user }) {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            ) : (
-              <div className="h-[320px]"><EmptyChartState /></div>
-            )}
+            ) : <div className="h-[260px] sm:h-[320px]"><EmptyChartState /></div>}
           </Card>
         </motion.div>
 
-        {/* INDIVIDUAL WORKLOAD ────────────────────────────────────────────── */}
+        {/* Individual Workload */}
         <motion.div variants={itemVariants}>
-          <Card className="p-6 border-border/50 flex flex-col overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+          <Card className="p-4 sm:p-6 border-border/50 flex flex-col overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3">
               <div>
-                <h3 className="text-lg font-semibold text-foreground">Individual Workload & Performance</h3>
-                <p className="text-sm text-muted-foreground mt-1">Assignments and on-time rates per team member</p>
+                <h3 className="text-base sm:text-lg font-semibold text-foreground">Individual Workload & Performance</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">Assignments and on-time rates per team member</p>
               </div>
               {overdueEmployees.length > 0 && (
-                <div className="py-2 px-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg flex items-center gap-2 shrink-0">
-                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500" />
-                  <span className="text-sm text-red-800 dark:text-red-400 font-medium">
+                <div className="py-2 px-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg flex items-start gap-2 shrink-0 max-w-full sm:max-w-xs">
+                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500 shrink-0 mt-0.5" />
+                  <span className="text-xs sm:text-sm text-red-800 dark:text-red-400 font-medium break-words">
                     Attention: {overdueEmployees.map(e => e.name).join(', ')} (Most Overdue)
                   </span>
                 </div>
               )}
             </div>
-
             {hasEmpData ? (
               <>
-                <div className="h-[350px] w-full [&_*]:outline-none">
-                  <ResponsiveContainer width="100%" height={350}>
-                    <ComposedChart data={stats.employeeData} margin={{ top: 30, right: 10, left: -20, bottom: 20 }} barSize={32}>
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} dy={12} />
-                      <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                      <Tooltip cursor={false} content={<CustomTooltip type="employee" />} />
-                      <Bar dataKey="completed" stackId="a" fill={COLORS.completed} />
-                      <Bar dataKey="in_progress" stackId="a" fill={COLORS.in_progress} />
-                      <Bar dataKey="pending" stackId="a" fill={COLORS.pending} />
-                      <Bar dataKey="overdue" stackId="a" fill={COLORS.overdue} />
-                      <Line type="monotone" dataKey="chartTotal" stroke="transparent" strokeWidth={0}
-                        activeDot={false} isAnimationActive={false} dot={<DominantPercentageLabel />} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                {/* Scroll wrapper on small screens so chart isn't crushed */}
+                <div className="w-full overflow-x-auto">
+                  <div className="min-w-[400px] h-[300px] sm:h-[350px] [&_*]:outline-none">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={stats.employeeData} margin={{ top: 30, right: 10, left: -10, bottom: 20 }} barSize={24}>
+                        <XAxis dataKey="name" axisLine={false} tickLine={false}
+                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} dy={10} />
+                        <YAxis allowDecimals={false} axisLine={false} tickLine={false}
+                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} width={30} />
+                        <Tooltip cursor={false} content={<CustomTooltip type="employee" />} />
+                        <Bar dataKey="completed" stackId="a" fill={COLORS.completed} />
+                        <Bar dataKey="in_progress" stackId="a" fill={COLORS.in_progress} />
+                        <Bar dataKey="pending" stackId="a" fill={COLORS.pending} />
+                        <Bar dataKey="overdue" stackId="a" fill={COLORS.overdue} />
+                        <Line type="monotone" dataKey="chartTotal" stroke="transparent" strokeWidth={0}
+                          activeDot={false} isAnimationActive={false} dot={<DominantPercentageLabel />} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
 
-                <div className="mt-8 border-t border-border/50 pt-6">
-                  <h4 className="text-sm font-semibold text-foreground mb-4">Performance Highlights</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <div className="mt-6 sm:mt-8 border-t border-border/50 pt-4 sm:pt-6">
+                  <h4 className="text-sm font-semibold text-foreground mb-3 sm:mb-4">Performance Highlights</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     {stats.employeeData.slice(0, 6).map((emp) => {
                       let dominantBadge = null;
                       let cardStyle = 'border-border/50 bg-muted/20 hover:bg-muted/40';
                       if (emp.chartTotal > 0) {
                         const categories = [
-                          { key: 'Completed', value: emp.completed, badgeColor: 'bg-emerald-500 text-white border-transparent', cardTheme: 'border-emerald-200 bg-emerald-50/60 dark:bg-emerald-500/10 dark:border-emerald-500/20 hover:bg-emerald-100/60' },
-                          { key: 'In Progress', value: emp.in_progress, badgeColor: 'bg-blue-500 text-white border-transparent', cardTheme: 'border-blue-200 bg-blue-50/60 dark:bg-blue-500/10 dark:border-blue-500/20 hover:bg-blue-100/60' },
-                          { key: 'Pending', value: emp.pending, badgeColor: 'bg-slate-400 text-white border-transparent', cardTheme: 'border-slate-200 bg-slate-50/60 dark:bg-slate-500/10 dark:border-slate-500/20 hover:bg-slate-100/60' },
-                          { key: 'Overdue', value: emp.overdue, badgeColor: 'bg-red-500 text-white border-transparent', cardTheme: 'border-red-200 bg-red-50/60 dark:bg-red-500/10 dark:border-red-500/20 hover:bg-red-100/60' },
+                          { key: 'Completed', value: emp.completed, badgeColor: 'bg-emerald-500 text-white border-transparent', cardTheme: 'border-emerald-200 bg-emerald-50/60 dark:bg-emerald-500/10 dark:border-emerald-500/20' },
+                          { key: 'In Progress', value: emp.in_progress, badgeColor: 'bg-blue-500 text-white border-transparent', cardTheme: 'border-blue-200 bg-blue-50/60 dark:bg-blue-500/10 dark:border-blue-500/20' },
+                          { key: 'Pending', value: emp.pending, badgeColor: 'bg-slate-400 text-white border-transparent', cardTheme: 'border-slate-200 bg-slate-50/60 dark:bg-slate-500/10 dark:border-slate-500/20' },
+                          { key: 'Overdue', value: emp.overdue, badgeColor: 'bg-red-500 text-white border-transparent', cardTheme: 'border-red-200 bg-red-50/60 dark:bg-red-500/10 dark:border-red-500/20' },
                         ].sort((a, b) => b.value - a.value);
                         const dominant = categories[0];
                         if (dominant.value > 0) {
                           cardStyle = dominant.cardTheme;
-                          dominantBadge = (
-                            <Badge className={`text-[10px] px-1.5 py-0 ${dominant.badgeColor}`}>
-                              {Math.round((dominant.value / emp.chartTotal) * 100)}%
-                            </Badge>
-                          );
+                          dominantBadge = <Badge className={`text-[10px] px-1.5 py-0 ${dominant.badgeColor}`}>{Math.round((dominant.value / emp.chartTotal) * 100)}%</Badge>;
                         }
                       }
                       return (
-                        <div key={emp.name} className={`p-4 rounded-xl border transition-colors ${cardStyle}`}>
-                          <p className="text-sm font-bold text-foreground truncate" title={emp.name}>{emp.name}</p>
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">{emp.department}</p>
-                          <div className="mt-3 flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">{emp.chartTotal} Tasks</span>
+                        <div key={emp.name} className={`p-3 sm:p-4 rounded-xl border transition-colors ${cardStyle}`}>
+                          <p className="text-xs sm:text-sm font-bold text-foreground truncate" title={emp.name}>{emp.name}</p>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground truncate mt-0.5">{emp.department}</p>
+                          <div className="mt-2 sm:mt-3 flex items-center justify-between">
+                            <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">{emp.chartTotal} Tasks</span>
                             {dominantBadge}
                           </div>
                           {emp.overdue > 0 && (
-                            <p className="text-[11px] font-semibold text-red-500 mt-2 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
-                              {emp.overdue} Overdue
+                            <p className="text-[10px] sm:text-[11px] font-semibold text-red-500 mt-1.5 sm:mt-2 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />{emp.overdue} Overdue
                             </p>
                           )}
                         </div>
@@ -828,14 +714,15 @@ export default function Dashboard({ user }) {
                 </div>
               </>
             ) : (
-              <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[180px] sm:h-[200px] flex items-center justify-center text-muted-foreground text-sm">
                 No active employee data available.
               </div>
             )}
           </Card>
         </motion.div>
 
-        {/* EXECUTION TABLE ────────────────────────────────────────────────── */}
+        {/* Execution Table - HIDDEN FOR MEMBERS */}
+        {user?.role !== 'member' && (
         <motion.div variants={itemVariants}>
           <Card className="border-border/50 overflow-hidden">
             <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -845,67 +732,53 @@ export default function Dashboard({ user }) {
               </div>
               <div className="relative w-full sm:w-64 shrink-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search employee..."
-                  value={employeeSearch}
-                  onChange={(e) => setEmployeeSearch(e.target.value)}
-                  className="pl-9 h-9 bg-background"
-                />
+                <Input placeholder="Search employee..." value={employeeSearch}
+                  onChange={e => setEmployeeSearch(e.target.value)} className="pl-9 h-9 bg-background" />
               </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left whitespace-nowrap">
                 <thead className="bg-muted/30 text-muted-foreground border-b border-border/50">
                   <tr>
-                    <th className="px-6 py-4 font-medium">Team Member</th>
-                    <th className="px-6 py-4 font-medium text-center">Completed</th>
-                    <th className="px-6 py-4 font-medium text-center">In Progress</th>
-                    <th className="px-6 py-4 font-medium text-center">Overdue</th>
-                    <th className="px-6 py-4 font-medium text-center">Pending</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium">Team Member</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-center">Completed</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-center">In Progress</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-center">Overdue</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-center">Pending</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {stats.employeeData
-                    .filter(u => u.name.toLowerCase().includes(employeeSearch.toLowerCase()))
-                    .map((u) => (
-                      <tr key={u.name}
-                        className={`transition-colors ${u.overdue > 0
-                          ? 'bg-red-50/40 dark:bg-red-500/5 hover:bg-red-50/70 dark:hover:bg-red-500/10'
-                          : 'hover:bg-muted/20'
-                          }`}
-                      >
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-foreground">{u.name}</span>
-                            {u.overdue > 0 && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
-                                <AlertCircle className="h-2.5 w-2.5" />
-                                Overdue
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">{u.department}</p>
-                        </td>
-                        <td className="px-6 py-3.5 min-w-[120px]"><StatCell value={u.completed} colorClass={PILL_COLORS.completed} /></td>
-                        <td className="px-6 py-3.5 min-w-[120px]"><StatCell value={u.in_progress} colorClass={PILL_COLORS.in_progress} /></td>
-                        <td className="px-6 py-3.5 min-w-[120px]"><StatCell value={u.overdue} colorClass={PILL_COLORS.overdue} /></td>
-                        <td className="px-6 py-3.5 min-w-[120px]"><StatCell value={u.pending} colorClass={PILL_COLORS.pending} /></td>
-                      </tr>
-                    ))}
-                  {stats.employeeData.filter(u => u.name.toLowerCase().includes(employeeSearch.toLowerCase())).length === 0 && (
-                    <tr>
-                      <td colSpan="5" className="px-6 py-10 text-center text-muted-foreground">
-                        {employeeSearch ? 'No employees match your search.' : 'No active execution data available.'}
+                  {stats.employeeData.filter(u => u.name.toLowerCase().includes(employeeSearch.toLowerCase())).map(u => (
+                    <tr key={u.name} className={`transition-colors ${u.overdue > 0 ? 'bg-red-50/40 dark:bg-red-500/5 hover:bg-red-50/70 dark:hover:bg-red-500/10' : 'hover:bg-muted/20'}`}>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-foreground">{u.name}</span>
+                          {u.overdue > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+                              <AlertCircle className="h-2.5 w-2.5" />Overdue
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{u.department}</p>
                       </td>
+                      <td className="px-6 py-3.5 min-w-[120px]"><StatCell value={u.completed} colorClass={PILL_COLORS.completed} /></td>
+                      <td className="px-6 py-3.5 min-w-[120px]"><StatCell value={u.in_progress} colorClass={PILL_COLORS.in_progress} /></td>
+                      <td className="px-6 py-3.5 min-w-[120px]"><StatCell value={u.overdue} colorClass={PILL_COLORS.overdue} /></td>
+                      <td className="px-6 py-3.5 min-w-[120px]"><StatCell value={u.pending} colorClass={PILL_COLORS.pending} /></td>
                     </tr>
+                  ))}
+                  {stats.employeeData.filter(u => u.name.toLowerCase().includes(employeeSearch.toLowerCase())).length === 0 && (
+                    <tr><td colSpan="5" className="px-6 py-10 text-center text-muted-foreground">
+                      {employeeSearch ? 'No employees match your search.' : 'No active execution data available.'}
+                    </td></tr>
                   )}
                 </tbody>
               </table>
             </div>
           </Card>
         </motion.div>
-
+        )}
       </motion.div>
-    </div>
+    </>
   );
 }
