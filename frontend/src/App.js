@@ -18,15 +18,11 @@ import './index.css';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-export const api = axios.create({
-  baseURL: API,
-});
+export const api = axios.create({ baseURL: API });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -34,10 +30,6 @@ function AppContent({ user, setUser }) {
   const navigate = useNavigate();
   const { connect, disconnect } = useWebSocket();
   const hasConnectedRef = useRef(false);
-
-  const handleNavigateToTasks = () => {
-    navigate('/tasks');
-  };
 
   useEffect(() => {
     if (user && !hasConnectedRef.current) {
@@ -49,7 +41,7 @@ function AppContent({ user, setUser }) {
     }
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Unauthenticated: only the auth route, no Layout ─────────────────────
+  // ── Unauthenticated ────────────────────────────────────────────────────────
   if (!user) {
     return (
       <Routes>
@@ -59,12 +51,12 @@ function AppContent({ user, setUser }) {
     );
   }
 
-  // ── Authenticated: ONE persistent Layout wraps all routes ────────────────
-  // This means the sidebar is never unmounted on navigation — it keeps its
-  // collapsed/expanded state without needing any workarounds.
+  // ── Authenticated — ONE persistent Layout wraps all routes ─────────────────
+  // This ensures the sidebar never remounts on navigation, preserving
+  // collapsed/expanded state without any workarounds.
   return (
     <>
-      <DigestPopup onNavigateToTasks={handleNavigateToTasks} />
+      <DigestPopup onNavigateToTasks={() => navigate('/tasks')} />
       <Layout user={user}>
         <Routes>
           <Route path="/" element={<Dashboard user={user} />} />
@@ -72,8 +64,18 @@ function AppContent({ user, setUser }) {
           <Route path="/tasks/:taskId" element={<TaskDetail user={user} />} />
           <Route path="/schedule" element={<DailySchedule user={user} />} />
           <Route path="/users" element={<UserManagement user={user} />} />
-          <Route path="/settings" element={<NotificationSettings user={user} />} />
           <Route path="/recurring" element={<RecurringTasks user={user} />} />
+
+          {/* ── Settings: admin-only guard at route level ── */}
+          <Route
+            path="/settings"
+            element={
+              user.role === 'admin'
+                ? <NotificationSettings user={user} />
+                : <Navigate to="/" replace />
+            }
+          />
+
           <Route path="/auth" element={<Navigate to="/" />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
@@ -90,14 +92,8 @@ function App() {
     const token = localStorage.getItem('token');
     if (token) {
       api.get('/users/me')
-        .then(res => {
-          setUser(res.data);
-          setLoading(false);
-        })
-        .catch(() => {
-          localStorage.removeItem('token');
-          setLoading(false);
-        });
+        .then(res => { setUser(res.data); setLoading(false); })
+        .catch(() => { localStorage.removeItem('token'); setLoading(false); });
     } else {
       setLoading(false);
     }

@@ -18,10 +18,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/t
 import { api } from '../App';
 import { toast } from 'sonner';
 
-// ─── Global toast dedup ───────────────────────────────────────────────────────
 const globalShownToastIds = new Set();
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 function getInitials(name = '') {
   return name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
 }
@@ -43,31 +41,17 @@ const ROLE_STYLES = {
   member: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400',
 };
 
-const ROLE_ICON_COLORS = {
-  admin: 'text-violet-500',
-  manager: 'text-blue-500',
-  member: 'text-slate-400',
-};
-
-// ─── Dark mode hook ───────────────────────────────────────────────────────────
 function useDarkMode() {
   const [isDark, setIsDark] = useState(() => {
     const stored = localStorage.getItem('theme');
     if (stored) return stored === 'dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
-
   useEffect(() => {
     const root = document.documentElement;
-    if (isDark) {
-      root.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      root.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
+    if (isDark) { root.classList.add('dark'); localStorage.setItem('theme', 'dark'); }
+    else { root.classList.remove('dark'); localStorage.setItem('theme', 'light'); }
   }, [isDark]);
-
   return [isDark, setIsDark];
 }
 
@@ -79,10 +63,7 @@ function NavItem({ item, isActive, isCollapsed, onNavigate }) {
       className={`
         relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium
         transition-all duration-150 group outline-none
-        ${isActive
-          ? 'bg-primary/10 text-primary'
-          : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-        }
+        ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'}
         ${isCollapsed ? 'justify-center px-0' : ''}
       `}
     >
@@ -100,14 +81,10 @@ function NavItem({ item, isActive, isCollapsed, onNavigate }) {
       <item.icon className={`h-[18px] w-[18px] shrink-0 transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
       <AnimatePresence initial={false}>
         {!isCollapsed && (
-          <motion.span
-            key="label"
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ opacity: 1, width: 'auto' }}
-            exit={{ opacity: 0, width: 0 }}
-            transition={{ duration: 0.18, ease: 'easeInOut' }}
-            className="overflow-hidden whitespace-nowrap"
-          >
+          <motion.span key="label"
+            initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }}
+            exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.18, ease: 'easeInOut' }}
+            className="overflow-hidden whitespace-nowrap">
             {item.name}
           </motion.span>
         )}
@@ -131,13 +108,10 @@ function NavItem({ item, isActive, isCollapsed, onNavigate }) {
 // ─── SidebarContent ───────────────────────────────────────────────────────────
 function SidebarContent({
   isCollapsed, isMobile, menuItems, currentPath,
-  onNavigate, onToggleCollapse, onCloseMobile,
-  user, initials, roleStyle,
+  onNavigate, onToggleCollapse, onCloseMobile, user, initials, roleStyle,
 }) {
   return (
-    <div className={`flex flex-col h-full ${isMobile ? 'w-72' : isCollapsed ? 'w-[60px]' : 'w-60'} transition-[width] duration-200 ease-in-out`}>
-
-      {/* Header: toggle (desktop) or close (mobile) */}
+    <div className="flex flex-col h-full w-full">
       <div className={`h-16 flex items-center shrink-0 border-b border-border/60 ${isCollapsed && !isMobile ? 'justify-center px-0' : 'px-3'}`}>
         {isMobile ? (
           <button onClick={onCloseMobile}
@@ -163,40 +137,25 @@ function SidebarContent({
         )}
       </div>
 
-      {/* Nav links */}
       <nav className={`flex-1 overflow-y-auto py-4 space-y-0.5 ${isCollapsed && !isMobile ? 'px-2' : 'px-3'}`}>
         {menuItems.map(item => (
-          <NavItem
-            key={item.path}
-            item={item}
+          <NavItem key={item.path} item={item}
             isActive={currentPath === item.path}
             isCollapsed={isCollapsed && !isMobile}
-            onNavigate={() => {
-              onNavigate(item.path);
-              if (isMobile) onCloseMobile();
-            }}
+            onNavigate={() => { onNavigate(item.path); if (isMobile) onCloseMobile(); }}
           />
         ))}
       </nav>
 
-      {/* User footer */}
-      <div className={`shrink-0 border-t border-border/60 ${isCollapsed && !isMobile ? 'p-2' : 'p-3'}`}>
+      {/* Sidebar bottom User name Icon and Title */}
+      {/* <div className={`shrink-0 border-t border-border/60 ${isCollapsed && !isMobile ? 'p-2' : 'p-3'}`}>
         {isCollapsed && !isMobile ? (
-          <TooltipProvider>
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <div className="flex justify-center">
-                  <div className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center cursor-default">
-                    <span className="text-[11px] font-bold text-primary">{initials}</span>
-                  </div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="text-xs">
-                <p className="font-semibold">{user?.name}</p>
-                <p className="text-muted-foreground capitalize">{user?.role}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          // Fixed: Tooltip wrapper removed completely for collapsed state
+          <div className="flex justify-center">
+            <div className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center cursor-default">
+              <span className="text-[11px] font-bold text-primary">{initials}</span>
+            </div>
+          </div>
         ) : (
           <div className="flex items-center gap-2.5 px-1 py-1 rounded-lg hover:bg-muted/50 transition-colors">
             <div className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
@@ -211,16 +170,15 @@ function SidebarContent({
             </span>
           </div>
         )}
-      </div>
+      </div> */}
     </div>
   );
 }
 
-// ─── Notification item ────────────────────────────────────────────────────────
 function NotificationItem({ n, onClick }) {
   return (
     <button onClick={onClick}
-      className={`w-full text-left p-3 rounded-lg transition-all duration-150 group ${n.is_read ? 'hover:bg-muted/50 opacity-60' : 'bg-primary/5 hover:bg-primary/10 border-l-2 border-primary'}`}>
+      className={`w-full text-left p-3 rounded-lg transition-all duration-150 ${n.is_read ? 'hover:bg-muted/50 opacity-60' : 'bg-primary/5 hover:bg-primary/10 border-l-2 border-primary'}`}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <p className={`text-sm truncate ${n.is_read ? 'font-normal' : 'font-semibold text-foreground'}`}>{n.title}</p>
@@ -238,7 +196,6 @@ function NotificationItem({ n, onClick }) {
   );
 }
 
-// ─── Profile Info Row ─────────────────────────────────────────────────────────
 function ProfileRow({ icon: Icon, label, value }) {
   if (!value) return null;
   return (
@@ -268,27 +225,19 @@ export default function Layout({ user, children }) {
   const [isFirstCheckDone, setIsFirstCheckDone] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
 
-  // ── Profile state ──────────────────────────────────────────────────────────
-  // localUser lets us update the navbar immediately after a successful edit
-  // without needing a page reload or passing setUser through props.
+  // Profile
   const [localUser, setLocalUser] = useState(user);
   const [profileOpen, setProfileOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [departments, setDepartments] = useState([]);
-  const [editForm, setEditForm] = useState({
-    name: '', email: '', phone: '', department: '', role: ''
-  });
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', department: '', role: '' });
 
-  // Keep localUser in sync if parent prop changes (e.g. fresh login)
   useEffect(() => { setLocalUser(user); }, [user]);
 
-  // Load departments for the edit form (only when edit dialog opens)
   useEffect(() => {
     if (editOpen && departments.length === 0) {
-      api.get('/departments')
-        .then(r => setDepartments(r.data))
-        .catch(() => { });
+      api.get('/departments').then(r => setDepartments(r.data)).catch(() => { });
     }
   }, [editOpen]);
 
@@ -300,19 +249,13 @@ export default function Layout({ user, children }) {
       department: localUser?.department || '',
       role: localUser?.role || 'member',
     });
-    setProfileOpen(false); // close popover first
+    setProfileOpen(false);
     setEditOpen(true);
   };
 
   const handleProfileSave = async () => {
-    if (!editForm.name.trim()) {
-      toast.error('Name is required');
-      return;
-    }
-    if (!editForm.email && !editForm.phone) {
-      toast.error('At least one of email or phone is required');
-      return;
-    }
+    if (!editForm.name.trim()) { toast.error('Name is required'); return; }
+    if (!editForm.email && !editForm.phone) { toast.error('At least email or phone is required'); return; }
     setSavingProfile(true);
     try {
       const res = await api.put(`/users/${localUser.id}`, editForm);
@@ -320,18 +263,13 @@ export default function Layout({ user, children }) {
       toast.success('Profile updated successfully');
       setEditOpen(false);
     } catch (err) {
-      const msg = err.response?.data?.message;
-      if (err.response?.status === 403) {
-        toast.error('Only admins can update user profiles');
-      } else {
-        toast.error(msg || 'Failed to update profile');
-      }
+      if (err.response?.status === 403) toast.error('Only admins can update user profiles');
+      else toast.error(err.response?.data?.message || 'Failed to update profile');
     } finally {
       setSavingProfile(false);
     }
   };
 
-  // ── Notifications ──────────────────────────────────────────────────────────
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
     const handler = (e) => { if (!e.matches) setMobileSidebarOpen(false); };
@@ -347,13 +285,11 @@ export default function Layout({ user, children }) {
 
   const loadNotifications = async () => {
     try {
-      const response = await api.get('/notifications');
-      const incoming = response.data;
+      const { data } = await api.get('/notifications');
       const isDashboard = location.pathname === '/';
-      incoming.forEach((n) => {
+      data.forEach((n) => {
         if (!n.is_read && !globalShownToastIds.has(n.id)) {
-          const shouldShow = isDashboard || isFirstCheckDone;
-          if (shouldShow) {
+          if (isDashboard || isFirstCheckDone) {
             globalShownToastIds.add(n.id);
             toast(n.title, {
               description: n.message, duration: 5000,
@@ -365,23 +301,17 @@ export default function Layout({ user, children }) {
           }
         }
       });
-      setNotifications(incoming);
+      setNotifications(data);
       setIsFirstCheckDone(true);
     } catch { console.error('Failed to load notifications'); }
   };
 
   const handleNotificationClick = async (n) => {
     try {
-      await markAsRead(n.id);
+      await api.put(`/notifications/${n.id}/read`);
+      setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x));
       navigate(n.task_id ? `/tasks/${n.task_id}` : '/tasks');
-    } catch (e) { console.error('Notification click error:', e); }
-  };
-
-  const markAsRead = async (id) => {
-    try {
-      await api.put(`/notifications/${id}/read`);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-    } catch (e) { console.error('Mark read error:', e); }
+    } catch (e) { console.error(e); }
   };
 
   const markAllAsRead = async () => {
@@ -396,24 +326,20 @@ export default function Layout({ user, children }) {
     finally { setMarkingAll(false); }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    window.location.href = '/auth';
-  };
+  const handleLogout = () => { localStorage.removeItem('token'); window.location.href = '/auth'; };
 
+  // ── Build nav items ──────────────────────────────────────────────────────
+  // RBAC: Settings is admin-only. All other pages are available to all roles.
+  // Recurring is visible to ALL roles (admin, manager, member).
   const menuItems = [
     { name: 'Dashboard', path: '/', icon: Home },
     { name: 'Work Items', path: '/tasks', icon: ClipboardList },
+    { name: 'Recurring', path: '/recurring', icon: Repeat },       // ← ALL roles
     { name: 'Schedule', path: '/schedule', icon: Calendar },
+    { name: 'Team', path: '/users', icon: Users },          // ← ALL roles
   ];
-  if (['admin', 'manager'].includes(localUser?.role)) {
-    menuItems.push({ name: 'Team', path: '/users', icon: Users });
-  }
   if (localUser?.role === 'admin') {
-    menuItems.push(
-      { name: 'Recurring', path: '/recurring', icon: Repeat },
-      { name: 'Settings', path: '/settings', icon: Settings }
-    );
+    menuItems.push({ name: 'Settings', path: '/settings', icon: Settings }); // admin only
   }
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -431,44 +357,41 @@ export default function Layout({ user, children }) {
       return next;
     }),
     onCloseMobile: () => setMobileSidebarOpen(false),
-    user: localUser,
-    initials,
-    roleStyle,
+    user: localUser, initials, roleStyle,
   };
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
 
-      {/* ── TOP NAVBAR ──────────────────────────────────────────────────────── */}
+      {/* ── NAVBAR ───────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
         <div className="px-4 h-16 flex items-center justify-between gap-4">
 
-          {/* Left */}
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon"
-              className="lg:hidden text-muted-foreground hover:text-foreground shrink-0"
+            <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-foreground shrink-0"
               onClick={() => setMobileSidebarOpen(true)} aria-label="Open menu">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </Button>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[25px] font-bold text-primary tracking-tight">Atlas</span>
+           
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-baseline gap-1.5 transition-opacity focus:outline-none"
+              aria-label="Go to dashboard"
+            >
+              <span className="text-[26px] font-bold text-primary tracking-tight">Atlas</span>
               <span className="text-[11px] font-medium text-muted-foreground tracking-wide">by Lyor</span>
-            </div>
+            </button>
           </div>
 
-          {/* Right */}
           <div className="flex items-center gap-1">
-
-            {/* Dark mode toggle */}
+            {/* Dark mode */}
             <TooltipProvider>
               <Tooltip delayDuration={0}>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon"
-                    className="text-muted-foreground hover:text-foreground rounded-full"
-                    onClick={() => setIsDark(d => !d)}
-                    aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground rounded-full"
+                    onClick={() => setIsDark(d => !d)}>
                     <AnimatePresence mode="wait" initial={false}>
                       {isDark ? (
                         <motion.span key="sun" initial={{ rotate: -90, opacity: 0, scale: 0.8 }} animate={{ rotate: 0, opacity: 1, scale: 1 }} exit={{ rotate: 90, opacity: 0, scale: 0.8 }} transition={{ duration: 0.18 }} className="flex">
@@ -482,13 +405,11 @@ export default function Layout({ user, children }) {
                     </AnimatePresence>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs font-medium">
-                  {isDark ? 'Light mode' : 'Dark mode'}
-                </TooltipContent>
+                <TooltipContent className="text-xs font-medium">{isDark ? 'Light mode' : 'Dark mode'}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
-            {/* Notification bell */}
+            {/* Notifications */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground rounded-full">
@@ -507,9 +428,7 @@ export default function Layout({ user, children }) {
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
-                    {unreadCount > 0 && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{unreadCount} new</span>
-                    )}
+                    {unreadCount > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{unreadCount} new</span>}
                   </div>
                   {unreadCount > 0 && (
                     <button onClick={markAllAsRead} disabled={markingAll}
@@ -526,24 +445,19 @@ export default function Layout({ user, children }) {
                         <Bell className="h-5 w-5 text-muted-foreground/50" />
                       </div>
                       <p className="text-sm text-muted-foreground font-medium">All caught up</p>
-                      <p className="text-xs text-muted-foreground/60">No notifications yet</p>
                     </div>
                   ) : (
                     <div className="p-2 space-y-0.5">
                       {notifications.some(n => !n.is_read) && (
                         <>
                           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 pt-1.5 pb-1">Unread</p>
-                          {notifications.filter(n => !n.is_read).map(n => (
-                            <NotificationItem key={n.id} n={n} onClick={() => handleNotificationClick(n)} />
-                          ))}
+                          {notifications.filter(n => !n.is_read).map(n => <NotificationItem key={n.id} n={n} onClick={() => handleNotificationClick(n)} />)}
                         </>
                       )}
                       {notifications.some(n => n.is_read) && (
                         <>
                           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 pt-3 pb-1">Earlier</p>
-                          {notifications.filter(n => n.is_read).map(n => (
-                            <NotificationItem key={n.id} n={n} onClick={() => handleNotificationClick(n)} />
-                          ))}
+                          {notifications.filter(n => n.is_read).map(n => <NotificationItem key={n.id} n={n} onClick={() => handleNotificationClick(n)} />)}
                         </>
                       )}
                     </div>
@@ -552,77 +466,50 @@ export default function Layout({ user, children }) {
               </PopoverContent>
             </Popover>
 
-            {/* Separator */}
             <div className="h-5 w-px bg-border/60 mx-1" />
 
-            {/* ── User avatar → Profile popover ──────────────────────────── */}
+            {/* User avatar → Profile popover */}
             <Popover open={profileOpen} onOpenChange={setProfileOpen}>
               <PopoverTrigger asChild>
-                <button
-                  className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0 select-none hover:bg-primary/25 hover:ring-2 hover:ring-primary/30 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  aria-label="Open profile"
-                >
+                <button className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0 select-none hover:bg-primary/25 hover:ring-2 hover:ring-primary/30 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label="Open profile">
                   <span className="text-[11px] font-bold text-primary">{initials}</span>
                 </button>
               </PopoverTrigger>
-
               <PopoverContent align="end" className="w-[300px] p-0 overflow-hidden rounded-2xl shadow-2xl border border-border/60">
-
-                {/* ── Card header: gradient banner + large avatar ─────────── */}
                 <div className="relative">
-                  {/* Gradient banner */}
                   <div className="h-16 bg-gradient-to-br from-primary/20 via-primary/10 to-transparent" />
-
-                  {/* Avatar — overlaps the banner */}
                   <div className="absolute left-4 -bottom-6">
                     <div className="h-14 w-14 rounded-2xl bg-primary/20 border-4 border-background flex items-center justify-center shadow-md">
                       <span className="text-lg font-bold text-primary">{initials}</span>
                     </div>
                   </div>
-
-                  {/* Role badge — top right of banner */}
                   <div className="absolute right-3 top-3">
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full capitalize ${roleStyle}`}>
-                      {localUser?.role}
-                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full capitalize ${roleStyle}`}>{localUser?.role}</span>
                   </div>
                 </div>
-
-                {/* Name + department */}
                 <div className="pt-9 px-4 pb-3">
                   <p className="text-base font-bold text-foreground leading-tight">{localUser?.name}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                    <Building2 className="h-3 w-3" />
-                    {localUser?.department || '—'}
+                    <Building2 className="h-3 w-3" />{localUser?.department || '—'}
                   </p>
                 </div>
-
-                {/* Contact info rows */}
+                {/* This is pop over details */}
                 {/* <div className="border-t border-border/50 py-1">
                   <ProfileRow icon={Mail} label="Email" value={localUser?.email} />
                   <ProfileRow icon={Phone} label="Phone" value={localUser?.phone} />
                   <ProfileRow icon={ShieldCheck} label="Role" value={localUser?.role ? localUser.role.charAt(0).toUpperCase() + localUser.role.slice(1) : undefined} />
                 </div> */}
-
-                {/* Action buttons */}
                 <div className="border-t border-border/50 p-2 space-y-0.5">
-                  {/* Edit profile — all users can attempt; API enforces admin for others */}
-                  <button
-                    onClick={openEditDialog}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 transition-colors group"
-                  >
+                  <button onClick={openEditDialog}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 transition-colors group">
                     <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                       <Pencil className="h-3.5 w-3.5 text-primary" />
                     </div>
                     <span className="flex-1 text-left">Edit Profile</span>
                     <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
                   </button>
-
-                  {/* Logout */}
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/8 transition-colors group"
-                  >
+                  <button onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/5 transition-colors group">
                     <div className="h-7 w-7 rounded-lg bg-destructive/10 flex items-center justify-center group-hover:bg-destructive/20 transition-colors">
                       <LogOut className="h-3.5 w-3.5 text-destructive" />
                     </div>
@@ -631,118 +518,58 @@ export default function Layout({ user, children }) {
                 </div>
               </PopoverContent>
             </Popover>
-
           </div>
         </div>
       </header>
 
-      {/* ── EDIT PROFILE DIALOG ──────────────────────────────────────────────── */}
+      {/* ── EDIT PROFILE DIALOG ──────────────────────────────────────────── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserCircle className="h-5 w-5 text-primary" />
-              Edit Profile
-            </DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><UserCircle className="h-5 w-5 text-primary" />Edit Profile</DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              {isAdmin
-                ? 'Update your profile information. All fields are editable.'
-                : 'You can update your name and contact details. Department and role changes require an admin.'}
+              {isAdmin ? 'All fields are editable.' : 'Department and role changes require an admin.'}
             </DialogDescription>
           </DialogHeader>
-
           <div className="space-y-4 mt-2">
-
-            {/* Avatar preview */}
             <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 border border-border/50">
               <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0">
-                <span className="text-lg font-bold text-primary">
-                  {getInitials(editForm.name || localUser?.name)}
-                </span>
+                <span className="text-lg font-bold text-primary">{getInitials(editForm.name || localUser?.name)}</span>
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">{editForm.name || localUser?.name}</p>
                 <p className="text-xs text-muted-foreground capitalize">{editForm.role} · {editForm.department}</p>
               </div>
             </div>
-
-            {/* Name */}
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Full Name *
-              </Label>
-              <Input
-                id="edit-name"
-                value={editForm.name}
-                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="Your full name"
-              />
-            </div>
-
-            {/* Email */}
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Email
-              </Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={editForm.email}
-                onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="email@company.com"
-              />
-            </div>
-
-            {/* Phone */}
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-phone" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Phone
-              </Label>
-              <Input
-                id="edit-phone"
-                type="tel"
-                value={editForm.phone}
-                onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
-                placeholder="+1 234 567 8900"
-              />
-            </div>
-
-            {/* Department — editable for admins, read-only for others */}
+            {[['edit-name', 'Full Name *', 'name', 'text', 'Your full name'], ['edit-email', 'Email', 'email', 'email', 'email@company.com'], ['edit-phone', 'Phone', 'phone', 'tel', '+1 234 567 8900']].map(([id, label, field, type, placeholder]) => (
+              <div key={id} className="space-y-1.5">
+                <Label htmlFor={id} className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</Label>
+                <Input id={id} type={type} value={editForm[field]} placeholder={placeholder}
+                  onChange={e => setEditForm(f => ({ ...f, [field]: e.target.value }))} />
+              </div>
+            ))}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                Department
-                {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case tracking-normal">(admin only)</span>}
+                Department {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}
               </Label>
               {isAdmin ? (
                 <Select value={editForm.department} onValueChange={v => setEditForm(f => ({ ...f, department: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map(d => (
-                      <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <SelectContent>{departments.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}</SelectContent>
                 </Select>
               ) : (
                 <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground">
-                  <Building2 className="h-3.5 w-3.5" />
-                  {editForm.department || '—'}
+                  <Building2 className="h-3.5 w-3.5" />{editForm.department || '—'}
                 </div>
               )}
             </div>
-
-            {/* Role — editable for admins, read-only for others */}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                Role
-                {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case tracking-normal">(admin only)</span>}
+                Role {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}
               </Label>
               {isAdmin ? (
                 <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="member">Member</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
@@ -751,62 +578,52 @@ export default function Layout({ user, children }) {
                 </Select>
               ) : (
                 <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground capitalize">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  {editForm.role || '—'}
+                  <ShieldCheck className="h-3.5 w-3.5" />{editForm.role || '—'}
                 </div>
               )}
             </div>
-
-            {/* Action buttons */}
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setEditOpen(false)} disabled={savingProfile}>
-                Cancel
-              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setEditOpen(false)} disabled={savingProfile}>Cancel</Button>
               <Button className="flex-1" onClick={handleProfileSave} disabled={savingProfile}>
-                {savingProfile
-                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
-                  : <><Save className="h-4 w-4 mr-2" /> Save Changes</>
-                }
+                {savingProfile ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</> : <><Save className="h-4 w-4 mr-2" />Save Changes</>}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── BODY ────────────────────────────────────────────────────────────── */}
+      {/* ── BODY ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-
-        {/* MOBILE SIDEBAR */}
         <AnimatePresence>
           {mobileSidebarOpen && (
             <>
-              <motion.div key="backdrop"
-                className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm lg:hidden"
+              <motion.div key="backdrop" className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm lg:hidden"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={() => setMobileSidebarOpen(false)} />
-              <motion.div key="drawer"
-                className="fixed inset-y-0 left-0 z-50 bg-card shadow-2xl lg:hidden flex"
+              {/* 👇 Added w-72 here */}
+              <motion.div key="drawer" className="fixed inset-y-0 left-0 z-50 bg-card shadow-2xl lg:hidden flex w-72"
                 initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
                 transition={{ type: 'spring', stiffness: 400, damping: 40 }}>
+                {/* Applied custom-scrollbar inside SidebarContent component internally or pass it */}
                 <SidebarContent {...sidebarSharedProps} isCollapsed={false} isMobile={true} />
               </motion.div>
             </>
           )}
         </AnimatePresence>
 
-        {/* DESKTOP SIDEBAR */}
-        <aside
-          className="hidden lg:flex flex-col border-r border-border/60 bg-card/40 shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out"
-          style={{ width: isCollapsed ? 60 : 240 }}
+        <motion.aside
+          initial={false}
+          animate={{ width: isCollapsed ? 60 : 240 }}
+          transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+          className="hidden lg:flex flex-col border-r border-border/60 bg-card/40 shrink-0 overflow-hidden"
         >
           <SidebarContent {...sidebarSharedProps} isCollapsed={isCollapsed} isMobile={false} />
-        </aside>
+        </motion.aside>
 
-        {/* MAIN CONTENT */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-            {children}
-          </div>
+        {/* 👇 ADDED custom-scrollbar here for the main page scroll */}
+        <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+          {/* Added max-w-[1600px] to prevent ultrawide monitors from stretching the layout too far */}
+          <div className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">{children}</div>
         </main>
       </div>
     </div>

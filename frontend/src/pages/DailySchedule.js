@@ -10,7 +10,7 @@ import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { api } from '../App';
-import { toast } from 'sonner';
+import { toast } from 'sonner'
 
 // --- Helper Functions for robust Date Math ---
 const getToday = () => {
@@ -186,6 +186,7 @@ export default function Schedule({ user }) {
   };
 
   // 2. WEEK VIEW (UPGRADED: Ultra-clean, un-congested horizontal layout)
+  // 2. WEEK VIEW (UPGRADED: Responsive Layout)
   const renderWeekView = () => {
     const weekStart = new Date(currentDate);
     weekStart.setDate(currentDate.getDate() - currentDate.getDay());
@@ -199,49 +200,73 @@ export default function Schedule({ user }) {
     const todayKey = formatDateKey(getToday());
 
     return (
-      <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
-        <div className="bg-card border rounded-xl shadow-sm min-w-[900px] flex flex-col">
+      <div className="w-full">
+        {/*
+          Use CSS Grid for responsiveness.
+          - Mobile (default): 1 column stack.
+          - Tablet (md): 3 columns.
+          - Desktop (lg): 7 columns (original view).
+        */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 lg:gap-0 lg:bg-card lg:border lg:rounded-xl lg:shadow-sm lg:overflow-hidden">
+          {weekDays.map(({ date, key }) => {
+            const dayTasks = tasksByDate[key] || [];
+            const isToday = key === todayKey;
 
-          {/* Header Row */}
-          <div className="grid grid-cols-7 border-b bg-muted/20">
-            {weekDays.map(({ date, key }) => {
-              const isToday = key === todayKey;
-              return (
-                <div key={`header-${key}`} className={`p-3 text-center border-r last:border-r-0 ${isToday ? 'bg-primary/5' : ''}`}>
-                  <p className={`text-xs font-bold uppercase tracking-wider ${isToday ? 'text-primary' : 'text-muted-foreground'}`}>
+            return (
+              <div
+                key={`day-${key}`}
+                className={`flex flex-col border rounded-xl lg:rounded-none lg:border-0 lg:border-r lg:last:border-r-0 overflow-hidden bg-card shadow-sm lg:shadow-none ${isToday ? 'lg:bg-primary/[0.02] border-primary/50' : ''
+                  }`}
+              >
+                {/* Day Header */}
+                <div
+                  className={`p-3 text-center border-b ${isToday ? 'bg-primary/10' : 'bg-muted/20'
+                    }`}
+                >
+                  <p
+                    className={`text-xs font-bold uppercase tracking-wider ${isToday ? 'text-primary' : 'text-muted-foreground'
+                      }`}
+                  >
                     {date.toLocaleDateString('en-US', { weekday: 'short' })}
                   </p>
-                  <div className={`mt-1.5 mx-auto w-8 h-8 flex items-center justify-center rounded-full text-lg font-bold ${isToday ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'text-foreground'}`}>
+                  <div
+                    className={`mt-1.5 mx-auto w-8 h-8 flex items-center justify-center rounded-full text-lg font-bold ${isToday
+                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                        : 'text-foreground'
+                      }`}
+                  >
                     {date.getDate()}
                   </div>
                 </div>
-              );
-            })}
-          </div>
 
-          {/* Content Row */}
-          <div className="grid grid-cols-7 auto-rows-fr">
-            {weekDays.map(({ date, key }) => {
-              const dayTasks = tasksByDate[key] || [];
-              const isToday = key === todayKey;
-
-              return (
-                <div key={`content-${key}`} className={`p-2 border-r last:border-r-0 min-h-[400px] ${isToday ? 'bg-primary/[0.02]' : 'bg-transparent'}`}>
+                {/* Day Content */}
+                <div
+                  className={`p-2 flex-1 lg:min-h-[400px] ${isToday && !dayTasks.length ? 'bg-primary/[0.02]' : 'bg-transparent'
+                    }`}
+                >
                   {dayTasks.length === 0 ? (
-                    <div className="h-full pt-8 flex items-start justify-center text-xs text-muted-foreground italic opacity-50">
+                    <div className="h-full pt-4 lg:pt-8 pb-4 flex items-start justify-center text-xs text-muted-foreground italic opacity-50 min-h-[100px] lg:min-h-0">
                       No tasks
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {dayTasks.map(task => (
+                      {dayTasks.map((task) => (
                         <div
                           key={task.id}
                           onClick={() => navigate(`/tasks/${task.id}`)}
                           className="p-2.5 rounded-lg border bg-background hover:border-primary/50 hover:shadow-sm cursor-pointer transition-all group flex flex-col gap-1"
                         >
                           <div className="flex items-center gap-1.5">
-                            <div className={`w-2 h-2 rounded-full ${getPriorityBgOnly(task.priority)} shrink-0`} />
-                            <span className={`text-[9px] font-bold uppercase tracking-wider truncate ${getStatusTextColor(task.status)}`}>
+                            <div
+                              className={`w-2 h-2 rounded-full ${getPriorityBgOnly(
+                                task.priority
+                              )} shrink-0`}
+                            />
+                            <span
+                              className={`text-[9px] font-bold uppercase tracking-wider truncate ${getStatusTextColor(
+                                task.status
+                              )}`}
+                            >
                               {task.status.replace('_', ' ')}
                             </span>
                           </div>
@@ -253,9 +278,9 @@ export default function Schedule({ user }) {
                     </div>
                   )}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -337,88 +362,82 @@ export default function Schedule({ user }) {
   };
 
   return (
-  
-      <div className="space-y-6 max-w-7xl mx-auto">
-
-        {/* HEADER CONTROLS */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <h1 className="text-3xl font-heading font-bold tracking-tight text-foreground">Schedule</h1>
-            <p className="text-muted-foreground mt-1">Manage and track your upcoming workload</p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center gap-4 bg-card p-2 rounded-xl border shadow-sm w-full md:w-auto">
-
-            {/* View Toggles */}
-            <div className="flex p-1 bg-muted rounded-lg w-full sm:w-auto">
-              <Button
-                variant={view === 'day' ? 'default' : 'ghost'}
-                size="sm"
-                className="flex-1 sm:flex-none h-8 text-xs font-semibold px-4"
-                onClick={() => setView('day')}
-              >
-                <ListTodo className="h-3.5 w-3.5 mr-2" /> Day
-              </Button>
-              <Button
-                variant={view === 'week' ? 'default' : 'ghost'}
-                size="sm"
-                className="flex-1 sm:flex-none h-8 text-xs font-semibold px-4"
-                onClick={() => setView('week')}
-              >
-                <CalendarRange className="h-3.5 w-3.5 mr-2" /> Week
-              </Button>
-              <Button
-                variant={view === 'month' ? 'default' : 'ghost'}
-                size="sm"
-                className="flex-1 sm:flex-none h-8 text-xs font-semibold px-4"
-                onClick={() => setView('month')}
-              >
-                <CalendarDays className="h-3.5 w-3.5 mr-2" /> Month
-              </Button>
-            </div>
-
-            <div className="hidden sm:block w-px h-8 bg-border"></div>
-
-            {/* Date Navigation */}
-            <div className="flex items-center justify-between w-full sm:w-auto gap-2">
-              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handlePrevious}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-
-              <div className="w-40 sm:w-48 text-center px-2 cursor-pointer hover:text-primary transition-colors" onClick={handleToday}>
-                <span className="text-sm font-bold truncate block">{getHeaderTitle()}</span>
-              </div>
-
-              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleNext}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-
-          </div>
+    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* HEADER CONTROLS */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <div>
+          <h1 className="text-3xl font-heading font-bold tracking-tight text-foreground">Schedule</h1>
+          <p className="text-muted-foreground mt-1">Manage and track your upcoming workload</p>
         </div>
 
-        {/* CALENDAR CONTENT */}
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-          </div>
-        ) : (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`${view}-${currentDate.toISOString()}`}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
+        <div className="flex flex-col sm:flex-row items-center gap-4 bg-card p-2 rounded-xl border shadow-sm w-full lg:w-auto">
+          {/* View Toggles */}
+          <div className="flex p-1 bg-muted rounded-lg w-full sm:w-auto">
+            <Button
+              variant={view === 'day' ? 'default' : 'ghost'}
+              size="sm"
+              className="flex-1 sm:flex-none h-8 text-xs font-semibold px-4"
+              onClick={() => setView('day')}
             >
-              {view === 'month' && renderMonthView()}
-              {view === 'week' && renderWeekView()}
-              {view === 'day' && renderDayView()}
-            </motion.div>
-          </AnimatePresence>
-        )}
+              <ListTodo className="h-3.5 w-3.5 mr-2" /> Day
+            </Button>
+            <Button
+              variant={view === 'week' ? 'default' : 'ghost'}
+              size="sm"
+              className="flex-1 sm:flex-none h-8 text-xs font-semibold px-4"
+              onClick={() => setView('week')}
+            >
+              <CalendarRange className="h-3.5 w-3.5 mr-2" /> Week
+            </Button>
+            <Button
+              variant={view === 'month' ? 'default' : 'ghost'}
+              size="sm"
+              className="flex-1 sm:flex-none h-8 text-xs font-semibold px-4"
+              onClick={() => setView('month')}
+            >
+              <CalendarDays className="h-3.5 w-3.5 mr-2" /> Month
+            </Button>
+          </div>
 
+          <div className="hidden sm:block w-px h-8 bg-border"></div>
+
+          {/* Date Navigation */}
+          <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handlePrevious}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+
+            <div className="w-40 sm:w-48 text-center px-2 cursor-pointer hover:text-primary transition-colors flex-1" onClick={handleToday}>
+              <span className="text-sm font-bold truncate block">{getHeaderTitle()}</span>
+            </div>
+
+            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleNext}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
 
+      {/* CALENDAR CONTENT */}
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${view}-${currentDate.toISOString()}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            {view === 'month' && renderMonthView()}
+            {view === 'week' && renderWeekView()}
+            {view === 'day' && renderDayView()}
+          </motion.div>
+        </AnimatePresence>
+      )}
+    </div>
   );
 }
