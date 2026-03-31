@@ -39,9 +39,8 @@ function AppContent({ user, setUser }) {
       hasConnectedRef.current = false;
       disconnect();
     }
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, connect, disconnect]);
 
-  // ── Unauthenticated ────────────────────────────────────────────────────────
   if (!user) {
     return (
       <Routes>
@@ -51,12 +50,12 @@ function AppContent({ user, setUser }) {
     );
   }
 
-  // ── Authenticated — ONE persistent Layout wraps all routes ─────────────────
-  // This ensures the sidebar never remounts on navigation, preserving
-  // collapsed/expanded state without any workarounds.
   return (
     <>
-      <DigestPopup onNavigateToTasks={() => navigate('/tasks')} />
+      {/* EXCELLENT FIX: Wrapped DigestPopup in explicit stacking context */}
+      <div style={{ position: 'relative', zIndex: 100 }}>
+        <DigestPopup onNavigateToTasks={() => navigate('/tasks')} />
+      </div>
       <Layout user={user}>
         <Routes>
           <Route path="/" element={<Dashboard user={user} />} />
@@ -65,8 +64,6 @@ function AppContent({ user, setUser }) {
           <Route path="/schedule" element={<DailySchedule user={user} />} />
           <Route path="/users" element={<UserManagement user={user} />} />
           <Route path="/recurring" element={<RecurringTasks user={user} />} />
-
-          {/* ── Settings: admin-only guard at route level ── */}
           <Route
             path="/settings"
             element={
@@ -75,7 +72,6 @@ function AppContent({ user, setUser }) {
                 : <Navigate to="/" replace />
             }
           />
-
           <Route path="/auth" element={<Navigate to="/" />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

@@ -9,10 +9,19 @@ import crypto from 'crypto'; // Built-in Node tool for random numbers
 export const sendOTP = async (req, res) => {
   const { email, phone } = req.body;
   try {
-    const query = email ? { email } : { phone };
+    // Clean the input: remove accidental spaces and make the search case-insensitive
+    const query = email
+      ? { email: { $regex: new RegExp(`^${email.trim()}$`, 'i') } }
+      : { phone: phone.trim() };
+
+    console.log(`[AUTH] Looking up user with:`, query);
+
     const user = await User.findOne(query);
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+      console.log(`[AUTH FAILED] User not found in database.`);
+      return res.status(404).json({ message: "User not found" });
+    }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -21,16 +30,16 @@ export const sendOTP = async (req, res) => {
 
     // SAVE the new OTP to MongoDB
     await OTP.create({
-      email: email || undefined,
-      phone: phone || undefined,
+      email: user.email || undefined, // use the DB's clean email
+      phone: user.phone || undefined,
       otp: otp
     });
 
-    console.log(`[DATABASE] OTP Saved for ${email || phone}: ${otp}`);
+    console.log(`[DATABASE] OTP Saved for ${user.email || user.phone}: ${otp}`);
 
-    // ... WhatsApp logic ...
     res.json({ message: "OTP sent", otp_for_testing: otp });
   } catch (error) {
+    console.error(`[AUTH ERROR]`, error);
     res.status(500).json({ message: error.message });
   }
 };

@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 
 const settingsSchema = new mongoose.Schema({
-  // Notification Settings
   deadline_alerts: [{ hours_before: Number, enabled: Boolean }],
   overdue_alert: {
     enabled: { type: Boolean, default: true },
@@ -20,10 +19,14 @@ const settingsSchema = new mongoose.Schema({
     start_of_day: { time: String, enabled: Boolean, due_soon_threshold_hours: Number, include: Object },
     end_of_day: { time: String, enabled: Boolean, include: Object }
   },
-  // Recurrence Settings
+  // ADDED
+  whatsapp_settings: {
+    enabled: { type: Boolean, default: false },
+    notification_types: { type: Object, default: {} }
+  },
   avoid_weekends: { type: String, default: 'none' },
   avoid_holidays: { type: Boolean, default: false },
-  holiday_list: [String] // Array of YYYY-MM-DD
+  holiday_list: [String]
 });
 
 export default mongoose.model('Settings', settingsSchema);

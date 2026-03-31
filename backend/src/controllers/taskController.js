@@ -40,7 +40,7 @@ export const createTask = async (req, res) => {
       assigned_by: req.user.id,
       due_date,
       is_recurring: is_recurring || false,
-      is_recurring_active: true,
+     
       created_at: now,
       updated_at: now
     });
@@ -345,7 +345,7 @@ export const stopRecurringTask = async (req, res) => {
 
     const updated = await Task.findOneAndUpdate(
       { id: req.params.task_id },
-      { is_recurring_active: false, updated_at: new Date().toISOString() },
+      { 'recurrence.enabled': false, updated_at: new Date().toISOString() },
       { new: true }
     );
 
@@ -573,7 +573,7 @@ const generateNextOccurrence = async (parentTask) => {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     recurrence: { ...parentTask.recurrence, parent_task_id: parentTask.id },
-    parent_recurring_id: parentTask.parent_recurring_id || parentTask.id
+    recurrence: { ...parentTask.recurrence, parent_task_id: parentTask.id, occurrences_created: 0 }
   });
   await newTask.save();
 };

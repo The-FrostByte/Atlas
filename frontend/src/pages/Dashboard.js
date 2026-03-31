@@ -39,6 +39,30 @@ const SCOPE_CONFIG = {
   member: { label: 'Your Tasks', icon: UserCircle, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-500/10 border-slate-200 dark:border-slate-500/20' },
 };
 
+const VIEW_MODES = [
+  {
+    key: 'all',
+    label: 'All Tasks',
+    description: 'Filtered by creation date',
+    activeClass: 'bg-slate-600 text-white dark:bg-slate-200 dark:text-slate-900',
+    idleClass: 'text-muted-foreground hover:text-foreground hover:bg-muted/60',
+  },
+  {
+    key: 'completed',
+    label: 'Completed',
+    description: 'Filtered by completion date',
+    activeClass: 'bg-emerald-600 text-white',
+    idleClass: 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10',
+  },
+  {
+    key: 'due_date',
+    label: 'By Due Date',
+    description: 'Filtered by due date',
+    activeClass: 'bg-blue-600 text-white',
+    idleClass: 'text-blue-700 dark:text-blue-400 hover:bg-blue-500/10',
+  },
+];
+
 // ─── Preset Filters ───────────────────────────────────────────────────────────
 const PRESET_FILTERS = [
   { key: 'all', label: 'All Time' },
@@ -264,12 +288,12 @@ function DateFilterBar({ activeFilter, onFilterChange, customRange, onCustomRang
                   <div>
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium block mb-1">Start Date</label>
                     <input type="date" value={localStart} max={localEnd || undefined} onChange={e => setLocalStart(e.target.value)}
-                      className="w-full text-sm bg-muted/40 border border-border/60 rounded-md px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all" />
+                      className="w-full text-sm bg-muted/40 border border-border/60 rounded-md px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all dark:scheme-dark dark:[&::-webkit-calendar-picker-indicator]:invert" />
                   </div>
                   <div>
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium block mb-1">End Date</label>
                     <input type="date" value={localEnd} min={localStart || undefined} onChange={e => setLocalEnd(e.target.value)}
-                      className="w-full text-sm bg-muted/40 border border-border/60 rounded-md px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all" />
+                      className="w-full text-sm bg-muted/40 border border-border/60 rounded-md px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all dark:scheme-dark dark:[&::-webkit-calendar-picker-indicator]:invert" />
                   </div>
                 </div>
                 <div className="flex gap-2 mt-4">
@@ -427,6 +451,7 @@ export default function Dashboard({ user }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const [activeDateRange, setActiveDateRange] = useState({ start_date: null, end_date: null });
+  const [viewMode, setViewMode] = useState('all'); // 'all' | 'completed' | 'due_date'
   const [stats, setStats] = useState({
     summary: { total_tasks: 0, overdue_tasks: 0, total_users: 0 },
     statusData: [],
@@ -436,7 +461,7 @@ export default function Dashboard({ user }) {
 
   useEffect(() => {
     loadStats(activeDateRange.start_date, activeDateRange.end_date);
-  }, [activeDateRange]);
+  }, [activeDateRange, viewMode]);
 
   const loadStats = async (start_date, end_date) => {
     setLoading(true);
@@ -444,6 +469,7 @@ export default function Dashboard({ user }) {
       const params = new URLSearchParams();
       if (start_date) params.set('start_date', start_date);
       if (end_date) params.set('end_date', end_date);
+      if (viewMode !== 'all') params.set('view_mode', viewMode);
       const qs = params.toString() ? `?${params.toString()}` : '';
 
       const [statsRes, employeeRes] = await Promise.all([
@@ -543,7 +569,9 @@ export default function Dashboard({ user }) {
         {/* HEADER */}
         <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex flex-col gap-2">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Operations Dashboard</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+              {viewMode === 'completed' ? 'Completed Tasks' : viewMode === 'due_date' ? 'Tasks by Due Date' : 'Operations Dashboard'}
+            </h1>
             <div className="flex items-center gap-3">
               <p className="text-muted-foreground">
                 Welcome back, <span className="font-medium text-foreground">{user?.name}</span>.
@@ -555,9 +583,37 @@ export default function Dashboard({ user }) {
               </div>
             </div>
           </div>
-          <div className="shrink-0">
-            <DateFilterBar activeFilter={activeFilter} onFilterChange={handleFilterChange}
-              customRange={customRange} onCustomRangeChange={setCustomRange} onCustomApply={handleCustomApply} />
+          <div className="flex flex-col items-end gap-3 shrink-0">
+            {/* View Mode Selector */}
+            <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-xl border border-border/50">
+              {VIEW_MODES.map(mode => (
+                <button
+                  key={mode.key}
+                  onClick={() => setViewMode(mode.key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 ${viewMode === mode.key ? mode.activeClass + ' shadow-sm' : mode.idleClass
+                    }`}
+                >
+                  <span>{mode.icon}</span>
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Date Range Bar — label changes to reflect active view mode */}
+            <div className="flex flex-col items-end gap-1">
+              <DateFilterBar
+                activeFilter={activeFilter}
+                onFilterChange={handleFilterChange}
+                customRange={customRange}
+                onCustomRangeChange={setCustomRange}
+                onCustomApply={handleCustomApply}
+              />
+              {activeFilter !== 'all' && (
+                <p className="text-[10px] text-muted-foreground">
+                  {VIEW_MODES.find(m => m.key === viewMode)?.description}
+                </p>
+              )}
+            </div>
           </div>
         </motion.div>
 
