@@ -17,6 +17,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { api } from '../App';
 import { toast } from 'sonner';
+import { useWebSocket } from '../contexts/WebSocketContext';
 
 const globalShownToastIds = new Set();
 
@@ -146,31 +147,6 @@ function SidebarContent({
           />
         ))}
       </nav>
-
-      {/* Sidebar bottom User name Icon and Title */}
-      {/* <div className={`shrink-0 border-t border-border/60 ${isCollapsed && !isMobile ? 'p-2' : 'p-3'}`}>
-        {isCollapsed && !isMobile ? (
-          // Fixed: Tooltip wrapper removed completely for collapsed state
-          <div className="flex justify-center">
-            <div className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center cursor-default">
-              <span className="text-[11px] font-bold text-primary">{initials}</span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2.5 px-1 py-1 rounded-lg hover:bg-muted/50 transition-colors">
-            <div className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-              <span className="text-[11px] font-bold text-primary">{initials}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground truncate leading-tight">{user?.name}</p>
-              <p className="text-[11px] text-muted-foreground truncate capitalize">{user?.department || user?.role}</p>
-            </div>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 capitalize ${roleStyle}`}>
-              {user?.role}
-            </span>
-          </div>
-        )}
-      </div> */}
     </div>
   );
 }
@@ -196,25 +172,13 @@ function NotificationItem({ n, onClick }) {
   );
 }
 
-function ProfileRow({ icon: Icon, label, value }) {
-  if (!value) return null;
-  return (
-    <div className="flex items-center gap-3 px-4 py-2">
-      <div className="h-7 w-7 rounded-md bg-muted/60 flex items-center justify-center shrink-0">
-        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{label}</p>
-        <p className="text-sm text-foreground font-medium truncate">{value}</p>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Layout ──────────────────────────────────────────────────────────────
 export default function Layout({ user, children }) {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // THE FIX: Extract 'subscribe' from WebSocketContext instead of 'socket'
+  const { subscribe } = useWebSocket();
 
   const [isDark, setIsDark] = useDarkMode();
   const [notifications, setNotifications] = useState([]);
@@ -225,7 +189,6 @@ export default function Layout({ user, children }) {
   const [isFirstCheckDone, setIsFirstCheckDone] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
 
-  // Profile
   const [localUser, setLocalUser] = useState(user);
   const [profileOpen, setProfileOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -277,29 +240,40 @@ export default function Layout({ user, children }) {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
+  // 1. Fetch initial state ONLY ONCE on mount
   useEffect(() => {
     loadNotifications();
-    const interval = setInterval(loadNotifications, 30000);
-    return () => clearInterval(interval);
-  }, [location.pathname]);
+  }, []);
+
+  // 2. WebSocket Listener for real-time pushed notifications
+  useEffect(() => {
+    const handleNewNotification = (newNotif) => {
+      setNotifications(prev => [newNotif, ...prev]);
+
+      if (!globalShownToastIds.has(newNotif.id)) {
+        globalShownToastIds.add(newNotif.id);
+        toast(newNotif.title, {
+          description: newNotif.message,
+          duration: 4000,
+          icon: <Bell className="h-4 w-4 text-primary" />,
+          action: { label: 'View', onClick: () => handleNotificationClick(newNotif) },
+        });
+      }
+    };
+
+    // Use the subscribe method from Context
+    const unsubscribe = subscribe('NEW_NOTIFICATION', handleNewNotification);
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [subscribe]);
 
   const loadNotifications = async () => {
     try {
       const { data } = await api.get('/notifications');
-      const isDashboard = location.pathname === '/';
       data.forEach((n) => {
-        if (!n.is_read && !globalShownToastIds.has(n.id)) {
-          if (isDashboard || isFirstCheckDone) {
-            globalShownToastIds.add(n.id);
-            toast(n.title, {
-              description: n.message, duration: 5000,
-              icon: <Bell className="h-4 w-4 text-primary" />,
-              action: { label: 'View', onClick: () => handleNotificationClick(n) },
-            });
-          } else {
-            globalShownToastIds.add(n.id);
-          }
-        }
+        if (!n.is_read) globalShownToastIds.add(n.id);
       });
       setNotifications(data);
       setIsFirstCheckDone(true);
@@ -328,18 +302,15 @@ export default function Layout({ user, children }) {
 
   const handleLogout = () => { localStorage.removeItem('token'); window.location.href = '/auth'; };
 
-  // ── Build nav items ──────────────────────────────────────────────────────
-  // RBAC: Settings is admin-only. All other pages are available to all roles.
-  // Recurring is visible to ALL roles (admin, manager, member).
   const menuItems = [
     { name: 'Dashboard', path: '/', icon: Home },
     { name: 'Work Items', path: '/tasks', icon: ClipboardList },
-    { name: 'Recurring', path: '/recurring', icon: Repeat },       // ← ALL roles
+    { name: 'Recurring', path: '/recurring', icon: Repeat },
     { name: 'Schedule', path: '/schedule', icon: Calendar },
-    { name: 'Team', path: '/users', icon: Users },          // ← ALL roles
+    { name: 'Team', path: '/users', icon: Users },
   ];
   if (localUser?.role === 'admin') {
-    menuItems.push({ name: 'Settings', path: '/settings', icon: Settings }); // admin only
+    menuItems.push({ name: 'Settings', path: '/settings', icon: Settings });
   }
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -362,11 +333,8 @@ export default function Layout({ user, children }) {
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
-
-      {/* ── NAVBAR ───────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
         <div className="px-4 h-16 flex items-center justify-between gap-4">
-
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-foreground shrink-0"
               onClick={() => setMobileSidebarOpen(true)} aria-label="Open menu">
@@ -374,24 +342,17 @@ export default function Layout({ user, children }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </Button>
-           
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-baseline gap-1.5 transition-opacity focus:outline-none"
-              aria-label="Go to dashboard"
-            >
+            <button onClick={() => navigate('/')} className="flex items-baseline gap-1.5 transition-opacity focus:outline-none">
               <span className="text-[26px] font-bold text-primary tracking-tight">Atlas</span>
               <span className="text-[11px] font-medium text-muted-foreground tracking-wide">by Lyor</span>
             </button>
           </div>
 
           <div className="flex items-center gap-1">
-            {/* Dark mode */}
             <TooltipProvider>
               <Tooltip delayDuration={0}>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground rounded-full"
-                    onClick={() => setIsDark(d => !d)}>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground rounded-full" onClick={() => setIsDark(d => !d)}>
                     <AnimatePresence mode="wait" initial={false}>
                       {isDark ? (
                         <motion.span key="sun" initial={{ rotate: -90, opacity: 0, scale: 0.8 }} animate={{ rotate: 0, opacity: 1, scale: 1 }} exit={{ rotate: 90, opacity: 0, scale: 0.8 }} transition={{ duration: 0.18 }} className="flex">
@@ -409,7 +370,6 @@ export default function Layout({ user, children }) {
               </Tooltip>
             </TooltipProvider>
 
-            {/* Notifications */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground rounded-full">
@@ -431,10 +391,8 @@ export default function Layout({ user, children }) {
                     {unreadCount > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{unreadCount} new</span>}
                   </div>
                   {unreadCount > 0 && (
-                    <button onClick={markAllAsRead} disabled={markingAll}
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50">
-                      <CheckCheck className="h-3.5 w-3.5" />
-                      {markingAll ? 'Marking…' : 'Mark all read'}
+                    <button onClick={markAllAsRead} disabled={markingAll} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50">
+                      <CheckCheck className="h-3.5 w-3.5" />{markingAll ? 'Marking…' : 'Mark all read'}
                     </button>
                   )}
                 </div>
@@ -468,10 +426,9 @@ export default function Layout({ user, children }) {
 
             <div className="h-5 w-px bg-border/60 mx-1" />
 
-            {/* User avatar → Profile popover */}
             <Popover open={profileOpen} onOpenChange={setProfileOpen}>
               <PopoverTrigger asChild>
-                <button className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0 select-none hover:bg-primary/25 hover:ring-2 hover:ring-primary/30 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label="Open profile">
+                <button className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0 select-none hover:bg-primary/25 hover:ring-2 hover:ring-primary/30 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
                   <span className="text-[11px] font-bold text-primary">{initials}</span>
                 </button>
               </PopoverTrigger>
@@ -489,27 +446,17 @@ export default function Layout({ user, children }) {
                 </div>
                 <div className="pt-9 px-4 pb-3">
                   <p className="text-base font-bold text-foreground leading-tight">{localUser?.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                    <Building2 className="h-3 w-3" />{localUser?.department || '—'}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5"><Building2 className="h-3 w-3" />{localUser?.department || '—'}</p>
                 </div>
-                {/* This is pop over details */}
-                {/* <div className="border-t border-border/50 py-1">
-                  <ProfileRow icon={Mail} label="Email" value={localUser?.email} />
-                  <ProfileRow icon={Phone} label="Phone" value={localUser?.phone} />
-                  <ProfileRow icon={ShieldCheck} label="Role" value={localUser?.role ? localUser.role.charAt(0).toUpperCase() + localUser.role.slice(1) : undefined} />
-                </div> */}
                 <div className="border-t border-border/50 p-2 space-y-0.5">
-                  <button onClick={openEditDialog}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 transition-colors group">
+                  <button onClick={openEditDialog} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 transition-colors group">
                     <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                       <Pencil className="h-3.5 w-3.5 text-primary" />
                     </div>
                     <span className="flex-1 text-left">Edit Profile</span>
                     <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
                   </button>
-                  <button onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/5 transition-colors group">
+                  <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/5 transition-colors group">
                     <div className="h-7 w-7 rounded-lg bg-destructive/10 flex items-center justify-center group-hover:bg-destructive/20 transition-colors">
                       <LogOut className="h-3.5 w-3.5 text-destructive" />
                     </div>
@@ -522,14 +469,11 @@ export default function Layout({ user, children }) {
         </div>
       </header>
 
-      {/* ── EDIT PROFILE DIALOG ──────────────────────────────────────────── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><UserCircle className="h-5 w-5 text-primary" />Edit Profile</DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              {isAdmin ? 'All fields are editable.' : 'Department and role changes require an admin.'}
-            </DialogDescription>
+            <DialogDescription className="text-xs text-muted-foreground">{isAdmin ? 'All fields are editable.' : 'Department and role changes require an admin.'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 border border-border/50">
@@ -544,85 +488,54 @@ export default function Layout({ user, children }) {
             {[['edit-name', 'Full Name *', 'name', 'text', 'Your full name'], ['edit-email', 'Email', 'email', 'email', 'email@company.com'], ['edit-phone', 'Phone', 'phone', 'tel', '+1 234 567 8900']].map(([id, label, field, type, placeholder]) => (
               <div key={id} className="space-y-1.5">
                 <Label htmlFor={id} className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</Label>
-                <Input id={id} type={type} value={editForm[field]} placeholder={placeholder}
-                  onChange={e => setEditForm(f => ({ ...f, [field]: e.target.value }))} />
+                <Input id={id} type={type} value={editForm[field]} placeholder={placeholder} onChange={e => setEditForm(f => ({ ...f, [field]: e.target.value }))} />
               </div>
             ))}
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                Department {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}
-              </Label>
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">Department {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}</Label>
               {isAdmin ? (
                 <Select value={editForm.department} onValueChange={v => setEditForm(f => ({ ...f, department: v }))}>
                   <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                   <SelectContent>{departments.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}</SelectContent>
                 </Select>
               ) : (
-                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground">
-                  <Building2 className="h-3.5 w-3.5" />{editForm.department || '—'}
-                </div>
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground"><Building2 className="h-3.5 w-3.5" />{editForm.department || '—'}</div>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                Role {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}
-              </Label>
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">Role {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}</Label>
               {isAdmin ? (
                 <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="member">Member</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                  </SelectContent>
+                  <SelectContent><SelectItem value="member">Member</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent>
                 </Select>
               ) : (
-                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground capitalize">
-                  <ShieldCheck className="h-3.5 w-3.5" />{editForm.role || '—'}
-                </div>
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground capitalize"><ShieldCheck className="h-3.5 w-3.5" />{editForm.role || '—'}</div>
               )}
             </div>
             <div className="flex gap-2 pt-2">
               <Button variant="outline" className="flex-1" onClick={() => setEditOpen(false)} disabled={savingProfile}>Cancel</Button>
-              <Button className="flex-1" onClick={handleProfileSave} disabled={savingProfile}>
-                {savingProfile ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</> : <><Save className="h-4 w-4 mr-2" />Save Changes</>}
-              </Button>
+              <Button className="flex-1" onClick={handleProfileSave} disabled={savingProfile}>{savingProfile ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</> : <><Save className="h-4 w-4 mr-2" />Save Changes</>}</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── BODY ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
         <AnimatePresence>
           {mobileSidebarOpen && (
             <>
-              <motion.div key="backdrop" className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm lg:hidden"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                onClick={() => setMobileSidebarOpen(false)} />
-              {/* 👇 Added w-72 here */}
-              <motion.div key="drawer" className="fixed inset-y-0 left-0 z-50 bg-card shadow-2xl lg:hidden flex w-72"
-                initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
-                transition={{ type: 'spring', stiffness: 400, damping: 40 }}>
-                {/* Applied custom-scrollbar inside SidebarContent component internally or pass it */}
+              <motion.div key="backdrop" className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileSidebarOpen(false)} />
+              <motion.div key="drawer" className="fixed inset-y-0 left-0 z-50 bg-card shadow-2xl lg:hidden flex w-72" initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', stiffness: 400, damping: 40 }}>
                 <SidebarContent {...sidebarSharedProps} isCollapsed={false} isMobile={true} />
               </motion.div>
             </>
           )}
         </AnimatePresence>
-
-        <motion.aside
-          initial={false}
-          animate={{ width: isCollapsed ? 60 : 240 }}
-          transition={{ type: "spring", bounce: 0, duration: 0.3 }}
-          className="hidden lg:flex flex-col border-r border-border/60 bg-card/40 shrink-0 overflow-hidden"
-        >
+        <motion.aside initial={false} animate={{ width: isCollapsed ? 60 : 240 }} transition={{ type: "spring", bounce: 0, duration: 0.3 }} className="hidden lg:flex flex-col border-r border-border/60 bg-card/40 shrink-0 overflow-hidden">
           <SidebarContent {...sidebarSharedProps} isCollapsed={isCollapsed} isMobile={false} />
         </motion.aside>
-
-        {/* 👇 ADDED custom-scrollbar here for the main page scroll */}
         <main className="flex-1 overflow-y-auto custom-scrollbar relative">
-          {/* Added max-w-[1600px] to prevent ultrawide monitors from stretching the layout too far */}
           <div className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">{children}</div>
         </main>
       </div>

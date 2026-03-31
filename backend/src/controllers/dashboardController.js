@@ -2,23 +2,18 @@ import Task from '../models/Task.js';
 import User from '../models/User.js';
 
 // ─── Helper: build the correct task query for a given role ───────────────────
-// Manager visibility = tasks assigned to USERS IN THEIR DEPT + tasks they created.
-// Uses User lookup because tasks don't reliably carry a department field.
 const buildTaskQuery = async (role, id, department) => {
   if (role === 'admin') return {};
-
   if (role === 'manager') {
     const deptUsers = await User.find({ department }).select('id').lean();
     const deptUserIds = deptUsers.map(u => u.id);
     return {
       $or: [
-        { assigned_to: { $in: deptUserIds } }, // assigned to anyone in dept
-        { assigned_by: id }                    // created by this manager
+        { assigned_to: { $in: deptUserIds } },
+        { assigned_by: id }
       ]
     };
   }
-
-  // member
   return { $or: [{ assigned_to: id }, { assigned_by: id }] };
 };
 
@@ -26,75 +21,91 @@ const buildTaskQuery = async (role, id, department) => {
 export const getDashboardStats = async (req, res) => {
   try {
     const { role, id, department } = req.user;
-    const { start_date, end_date } = req.query;
+    const { start_date, end_date, view_mode } = req.query;
     const now = new Date().toISOString();
 
     let taskQuery = await buildTaskQuery(role, id, department);
 
-    // Filter by task creation date (created_at stored as ISO string)
-    if (start_date && end_date) {
-      taskQuery.created_at = { $gte: start_date, $lte: end_date };
+    // FIX: Using resolution.completed_at based on the Task schema
+    if (view_mode === 'completed') {
+      taskQuery.status = 'completed';
+      if (start_date && end_date) taskQuery['resolution.completed_at'] = { $gte: start_date, $lte: end_date };
+    } else if (view_mode === 'due_date') {
+      if (start_date && end_date) taskQuery.due_date = { $gte: start_date, $lte: end_date };
+    } else {
+      if (start_date && end_date) taskQuery.created_at = { $gte: start_date, $lte: end_date };
     }
 
-    const allTasks = await Task.find(taskQuery).lean();
+    // SCALABILITY REFACTOR: Database-level aggregation instead of Node.js memory arrays
+    const statsPipeline = await Task.aggregate([
+      { $match: taskQuery },
+      {
+        $facet: {
+          basicCounts: [
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                overdue: { $sum: { $cond: [{ $and: [{ $ne: ["$status", "completed"] }, { $lt: ["$due_date", now] }] }, 1, 0] } }
+              }
+            }
+          ],
+          statusDist: [
+            {
+              $project: {
+                computedStatus: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: ["$status", "completed"] }, then: "completed" },
+                      { case: { $and: [{ $ne: ["$status", "completed"] }, { $lt: ["$due_date", now] }] }, then: "overdue" },
+                      { case: { $eq: ["$status", "in_progress"] }, then: "in_progress" },
+                      { case: { $eq: ["$status", "pending"] }, then: "pending" }
+                    ],
+                    default: "pending"
+                  }
+                }
+              }
+            },
+            { $group: { _id: "$computedStatus", count: { $sum: 1 } } }
+          ],
+          deptPerform: [
+            { $lookup: { from: "users", localField: "assigned_to", foreignField: "id", as: "user" } },
+            { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+            {
+              $group: {
+                _id: { $ifNull: ["$user.department", "General"] },
+                completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+                in_progress: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "in_progress"] }, { $gte: ["$due_date", now] }] }, 1, 0] } },
+                pending: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "pending"] }, { $gte: ["$due_date", now] }] }, 1, 0] } },
+                overdue: { $sum: { $cond: [{ $and: [{ $ne: ["$status", "completed"] }, { $lt: ["$due_date", now] }] }, 1, 0] } }
+              }
+            }
+          ]
+        }
+      }
+    ]);
 
-    // NEW — members now see their department count, not just "1"
+    const result = statsPipeline[0];
+
     const total_users = role === 'admin'
       ? await User.countDocuments()
-      : await User.countDocuments({ department }); // manager AND member both see dept count
+      : await User.countDocuments({ department });
 
     const summary = {
-      total_tasks: allTasks.length,
-      overdue_tasks: allTasks.filter(t => t.status !== 'completed' && t.due_date < now).length,
+      total_tasks: result.basicCounts[0]?.total || 0,
+      overdue_tasks: result.basicCounts[0]?.overdue || 0,
       total_users
     };
 
-    const status_distribution = [
-      { _id: 'completed', count: allTasks.filter(t => t.status === 'completed').length },
-      { _id: 'overdue', count: allTasks.filter(t => t.status !== 'completed' && t.due_date < now).length },
-      { _id: 'in_progress', count: allTasks.filter(t => t.status === 'in_progress' && t.due_date >= now).length },
-      { _id: 'pending', count: allTasks.filter(t => t.status === 'pending' && t.due_date >= now).length }
-    ].filter(item => item.count > 0);
+    const status_distribution = result.statusDist.filter(item => item.count > 0);
 
-    // Department performance — calculate scoped users based on role
-    let scopedUsersQuery = {};
-    if (role === 'manager') {
-      // For managers: Include everyone in their dept, PLUS any cross-dept assignees
-      const assigneeIds = [...new Set(allTasks.map(t => t.assigned_to).filter(Boolean))];
-      scopedUsersQuery = {
-        $or: [
-          { department: department },
-          { id: { $in: assigneeIds } }
-        ]
-      };
-    } else if (role === 'member') {
-      // For members: Collect unique assignee IDs from all tasks visible to this member
-      const assigneeIds = [...new Set(allTasks.map(t => t.assigned_to).filter(Boolean))];
-      // Also include the member themselves (for tasks assigned to them)
-      if (!assigneeIds.includes(id)) assigneeIds.push(id);
-      scopedUsersQuery = { id: { $in: assigneeIds } };
-    }
-
-    const scopedUsers = await User.find(scopedUsersQuery).lean();
-    const departments = [...new Set(scopedUsers.map(u => u.department || 'General'))];
-
-    const department_performance = await Promise.all(
-      departments.map(async (deptName) => {
-        const deptUserIds = scopedUsers
-          .filter(u => (u.department || 'General') === deptName)
-          .map(u => u.id);
-
-        const deptTasks = allTasks.filter(t => deptUserIds.includes(t.assigned_to));
-
-        return {
-          name: deptName,
-          completed: deptTasks.filter(t => t.status === 'completed').length,
-          overdue: deptTasks.filter(t => t.status !== 'completed' && t.due_date < now).length,
-          in_progress: deptTasks.filter(t => t.status === 'in_progress' && t.due_date >= now).length,
-          pending: deptTasks.filter(t => t.status === 'pending' && t.due_date >= now).length
-        };
-      })
-    );
+    const department_performance = result.deptPerform.map(d => ({
+      name: d._id,
+      completed: d.completed,
+      in_progress: d.in_progress,
+      pending: d.pending,
+      overdue: d.overdue
+    }));
 
     res.json({ summary, status_distribution, department_performance });
   } catch (error) {
@@ -106,59 +117,62 @@ export const getDashboardStats = async (req, res) => {
 export const getEmployeeLoadData = async (req, res) => {
   try {
     const { role, id, department } = req.user;
-    const { start_date, end_date } = req.query;
+    const { start_date, end_date, view_mode } = req.query;
     const now = new Date().toISOString();
 
     let taskQuery = await buildTaskQuery(role, id, department);
 
-    if (start_date && end_date) {
-      taskQuery.created_at = { $gte: start_date, $lte: end_date };
-    }
-
-    // ── Resolve users to show in the chart ────────────────────────────────────
-    let allTasks, scopedUsers;
-
-    if (role === 'manager') {
-      // Fetch tasks first to find cross-dept assignees created by this manager
-      allTasks = await Task.find(taskQuery).lean();
-      const assigneeIds = [...new Set(allTasks.map(t => t.assigned_to).filter(Boolean))];
-
-      // Fetch users who are EITHER in the manager's dept OR have a task visible to them
-      scopedUsers = await User.find({
-        $or: [
-          { department: department },
-          { id: { $in: assigneeIds } }
-        ]
-      }).lean();
-    } else if (role === 'member') {
-      // Fetch tasks first so we can find all assignees the member created tasks for
-      allTasks = await Task.find(taskQuery).lean();
-      const assigneeIds = [...new Set(allTasks.map(t => t.assigned_to).filter(Boolean))];
-      if (!assigneeIds.includes(id)) assigneeIds.push(id);
-      scopedUsers = await User.find({ id: { $in: assigneeIds } }).lean();
+    if (view_mode === 'completed') {
+      taskQuery.status = 'completed';
+      if (start_date && end_date) taskQuery['resolution.completed_at'] = { $gte: start_date, $lte: end_date };
+    } else if (view_mode === 'due_date') {
+      if (start_date && end_date) taskQuery.due_date = { $gte: start_date, $lte: end_date };
     } else {
-      // admin
-      [allTasks, scopedUsers] = await Promise.all([
-        Task.find(taskQuery).lean(),
-        User.find({}).lean()
-      ]);
+      if (start_date && end_date) taskQuery.created_at = { $gte: start_date, $lte: end_date };
     }
 
-    const employee_data = scopedUsers.map(u => {
-      const uTasks = allTasks.filter(t => t.assigned_to === u.id);
-      const total = uTasks.length;
-      const completed = uTasks.filter(t => t.status === 'completed').length;
-      const overdue = uTasks.filter(t => t.status !== 'completed' && t.due_date < now).length;
+    // 1. Ask DB to group all relevant tasks by assignee (Lightning fast)
+    const taskStats = await Task.aggregate([
+      { $match: taskQuery },
+      {
+        $group: {
+          _id: "$assigned_to",
+          total: { $sum: 1 },
+          completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+          in_progress: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "in_progress"] }, { $gte: ["$due_date", now] }] }, 1, 0] } },
+          pending: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "pending"] }, { $gte: ["$due_date", now] }] }, 1, 0] } },
+          overdue: { $sum: { $cond: [{ $and: [{ $ne: ["$status", "completed"] }, { $lt: ["$due_date", now] }] }, 1, 0] } }
+        }
+      }
+    ]);
 
+    const statsMap = new Map(taskStats.map(s => [s._id, s]));
+
+    // 2. Fetch scoped users based on roles
+    let scopedUsers;
+    if (role === 'manager') {
+      const assigneeIds = Array.from(statsMap.keys());
+      scopedUsers = await User.find({ $or: [{ department }, { id: { $in: assigneeIds } }] }).select('id name department').lean();
+    } else if (role === 'member') {
+      const assigneeIds = Array.from(statsMap.keys());
+      if (!assigneeIds.includes(id)) assigneeIds.push(id);
+      scopedUsers = await User.find({ id: { $in: assigneeIds } }).select('id name department').lean();
+    } else {
+      scopedUsers = await User.find({}).select('id name department').lean();
+    }
+
+    // 3. Map users to their pre-calculated stats (Preserves users with 0 tasks)
+    const employee_data = scopedUsers.map(u => {
+      const stats = statsMap.get(u.id) || { total: 0, completed: 0, in_progress: 0, pending: 0, overdue: 0 };
       return {
         name: u.name,
         department: u.department || 'General',
-        total,
-        completed,
-        overdue,
-        in_progress: uTasks.filter(t => t.status === 'in_progress' && t.due_date >= now).length,
-        pending: uTasks.filter(t => t.status === 'pending' && t.due_date >= now).length,
-        on_time_rate: total > 0 ? Math.round((completed / total) * 100) : 100
+        total: stats.total,
+        completed: stats.completed,
+        overdue: stats.overdue,
+        in_progress: stats.in_progress,
+        pending: stats.pending,
+        on_time_rate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 100
       };
     });
 

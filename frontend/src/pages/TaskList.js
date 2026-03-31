@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'; // ✅ Added useRef here
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -83,9 +83,8 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
   const priorityCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
   const statusCfg = STATUS_CONFIG[taskIsOverdue ? 'delayed' : task.status] || STATUS_CONFIG.pending;
 
-  // ── RBAC: use centralised permissions.js — no inline logic ──────────────────
   const canEdit = canEditTask(user, task, users);
-  const canDelete = canDeleteTask(user);           // admin only
+  const canDelete = canDeleteTask(user);
   const canStatus = canChangeTaskStatus(user, task, users);
   const canComplete = canCompleteTask(user, task);
   const canRecurrence = canModifyRecurrence(user, task);
@@ -107,7 +106,6 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
         <div className="p-5">
           <div className="flex items-start gap-4">
             <div className="flex-1 min-w-0 space-y-2.5">
-              {/* Title row */}
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className={`text-base font-semibold leading-tight ${isCompleted ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                   {task.title}
@@ -135,11 +133,9 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
                   </Badge>
                 )}
               </div>
-              {/* Description */}
               {task.description && (
                 <p className="text-sm text-muted-foreground line-clamp-1">{task.description}</p>
               )}
-              {/* Meta */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <User className="h-3.5 w-3.5" />
@@ -158,9 +154,7 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-1.5 shrink-0">
-              {/* Status selector */}
               {!isCompleted && canStatus ? (
                 <Select value={task.status} onValueChange={(v) => onStatusChange(task.id, v)}>
                   <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
@@ -176,26 +170,22 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
                 </Badge>
               ) : null}
 
-              {/* View */}
               <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => onView(task.id)} title="View details">
                 <Eye className="h-3.5 w-3.5" />
               </Button>
 
-              {/* Edit — only if canEditTask */}
               {canEdit && !isCompleted && (
                 <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => onEdit(task)} title="Edit task">
                   <Edit className="h-3.5 w-3.5" />
                 </Button>
               )}
 
-              {/* Edit Recurrence — completed parent recurring tasks, creator/admin only */}
               {canRecurrence && isCompleted && isRecurring && (
                 <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onEditRecurrence(task)}>
                   <Repeat className="h-3.5 w-3.5 mr-1" />Recurrence
                 </Button>
               )}
 
-              {/* Delete — admin ONLY */}
               {canDelete && (
                 <Button variant="outline" size="icon"
                   className="h-8 w-8 text-destructive/60 hover:text-destructive hover:border-destructive/30 hover:bg-destructive/5"
@@ -206,7 +196,6 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
             </div>
           </div>
 
-          {/* Resolution */}
           {isCompleted && task.resolution && (
             <div className="mt-4 pt-4 border-t border-border/50">
               <div className="flex items-start gap-2">
@@ -252,7 +241,6 @@ export default function TaskList({ user }) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ✅ DUE DATE REF ADDED INSIDE COMPONENT AS REQUESTED
   const dueDateRef = useRef(null);
 
   const [tasks, setTasks] = useState([]);
@@ -267,6 +255,7 @@ export default function TaskList({ user }) {
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
   const [completingTask, setCompletingTask] = useState(null);
   const [completionData, setCompletionData] = useState({ resolution_text: '', attachment_ids: [], pendingFiles: [], uploading: false });
+
   const [recurrenceEditModalOpen, setRecurrenceEditModalOpen] = useState(false);
   const [editingRecurrenceTask, setEditingRecurrenceTask] = useState(null);
   const [recurrenceEditForm, setRecurrenceEditForm] = useState({
@@ -286,6 +275,8 @@ export default function TaskList({ user }) {
   const [selectedPriorities, setSelectedPriorities] = useState([]);
   const [dueDateFrom, setDueDateFrom] = useState('');
   const [dueDateTo, setDueDateTo] = useState('');
+  const [createdFrom, setCreatedFrom] = useState(''); // Restored
+  const [createdTo, setCreatedTo] = useState('');     // Restored
   const [filterAssignedTo, setFilterAssignedTo] = useState('');
   const [filterAssignedBy, setFilterAssignedBy] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -318,7 +309,7 @@ export default function TaskList({ user }) {
   useEffect(() => {
     loadTasks();
   }, [filterStatus, myTasksOnly, searchQuery, selectedStatuses, selectedPriorities,
-    dueDateFrom, dueDateTo, filterAssignedTo, filterAssignedBy,
+    dueDateFrom, dueDateTo, createdFrom, createdTo, filterAssignedTo, filterAssignedBy,
     overdueOnly, parentRecurringOnly, sortOption, pagination.page]);
 
   const loadTasks = async () => {
@@ -330,8 +321,12 @@ export default function TaskList({ user }) {
       if (selectedStatuses.length > 0) params.statuses = selectedStatuses.join(',');
       else if (filterStatus !== 'all' && filterStatus !== 'delayed') params.status = filterStatus;
       if (selectedPriorities.length > 0) params.priorities = selectedPriorities.join(',');
+
       if (dueDateFrom) params.due_from = new Date(dueDateFrom).toISOString();
       if (dueDateTo) params.due_to = new Date(dueDateTo).toISOString();
+      if (createdFrom) params.created_from = new Date(createdFrom).toISOString();
+      if (createdTo) params.created_to = new Date(createdTo).toISOString();
+
       if (filterAssignedTo) params.assigned_to = filterAssignedTo;
       if (filterAssignedBy) params.assigned_by = filterAssignedBy;
       if (overdueOnly || filterStatus === 'delayed') params.overdue = 'true';
@@ -369,24 +364,60 @@ export default function TaskList({ user }) {
     } catch { /* silent */ }
   };
 
+  // Restored: Validation for Notification Alerts
+  const validateDeadlineAlerts = () => {
+    const alerts = formData.notifications.deadline_alerts;
+    for (let i = 0; i < alerts.length; i++) {
+      const hours = alerts[i].hours_before;
+      if (hours === '' || hours === null || hours === undefined) {
+        return `Deadline alert ${i + 1}: Hours value is required`;
+      }
+      const numValue = parseInt(hours);
+      if (isNaN(numValue) || numValue < 1) {
+        return `Deadline alert ${i + 1}: Hours must be at least 1`;
+      }
+    }
+    return null;
+  };
+
   const handleSubmit = async () => {
     if (!formData.title || !formData.assigned_to || !formData.due_date) {
       toast.error('Please fill in all required fields');
       return;
     }
+
+    if (formData.notifications.enabled) {
+      const alertError = validateDeadlineAlerts();
+      if (alertError) {
+        toast.error(alertError);
+        return;
+      }
+    }
+
     try {
       const utcDueDate = localDateTimeToUTC(formData.due_date);
       const payload = {
         title: formData.title, description: formData.description,
         priority: formData.priority, assigned_to: formData.assigned_to, due_date: utcDueDate
       };
+
       if (formData.notifications.enabled) {
         payload.notifications = {
           ...formData.notifications,
           deadline_alerts: formData.notifications.deadline_alerts.map(a => ({ ...a, hours_before: parseInt(a.hours_before) || 24 }))
         };
       }
+
       if (formData.recurrence.enabled) {
+        if (formData.recurrence.due_in_days < 1) {
+          toast.error('Number of days must be at least 1');
+          return;
+        }
+        if (formData.recurrence.interval < 1) {
+          toast.error('Number of days/months must be at least 1');
+          return;
+        }
+
         const rec = { ...formData.recurrence };
         if (!rec.end_date) delete rec.end_date;
         if (!rec.max_occurrences) delete rec.max_occurrences;
@@ -395,6 +426,7 @@ export default function TaskList({ user }) {
         payload.is_recurring = true;
         if (formData.recurrence_override.enabled) payload.recurrence_override = formData.recurrence_override;
       }
+
       if (editingTask) {
         await api.put(`/tasks/${editingTask.id}`, payload);
         toast.success('Task updated successfully');
@@ -566,6 +598,41 @@ export default function TaskList({ user }) {
     } finally { setSavingRecurrence(false); }
   };
 
+  // Restored Recurrence Helpers
+  const handleRecurrenceToggle = (enabled) => {
+    setFormData({ ...formData, recurrence: { ...formData.recurrence, enabled } });
+    setShowRecurrenceSettings(enabled);
+  };
+
+  const toggleWeekday = (day) => {
+    const currentDays = formData.recurrence.days_of_week || [];
+    let newDays = currentDays.includes(day)
+      ? currentDays.filter(d => d !== day)
+      : [...currentDays, day].sort((a, b) => a - b);
+    setFormData({ ...formData, recurrence: { ...formData.recurrence, days_of_week: newDays } });
+  };
+
+  const updateDeadlineAlert = (index, field, value) => {
+    const newAlerts = [...formData.notifications.deadline_alerts];
+    newAlerts[index] = { ...newAlerts[index], [field]: value };
+    setFormData({ ...formData, notifications: { ...formData.notifications, deadline_alerts: newAlerts } });
+  };
+
+  const addDeadlineAlert = () => {
+    setFormData({
+      ...formData,
+      notifications: {
+        ...formData.notifications,
+        deadline_alerts: [...formData.notifications.deadline_alerts, { hours_before: 24, enabled: true }]
+      }
+    });
+  };
+
+  const removeDeadlineAlert = (index) => {
+    const newAlerts = formData.notifications.deadline_alerts.filter((_, i) => i !== index);
+    setFormData({ ...formData, notifications: { ...formData.notifications, deadline_alerts: newAlerts } });
+  };
+
   const resetForm = () => {
     setFormData({
       title: '', description: '', priority: 'medium', assigned_to: '', due_date: '',
@@ -588,6 +655,7 @@ export default function TaskList({ user }) {
     setSearchInput(''); setSearchQuery('');
     setSelectedStatuses([]); setSelectedPriorities([]);
     setDueDateFrom(''); setDueDateTo('');
+    setCreatedFrom(''); setCreatedTo('');
     setFilterAssignedTo(''); setFilterAssignedBy('');
     setOverdueOnly(false); setParentRecurringOnly(false); setMyTasksOnly(false);
     setFilterStatus('all'); setSortOption('created_at_desc');
@@ -615,6 +683,7 @@ export default function TaskList({ user }) {
     if (selectedStatuses.length) count++;
     if (selectedPriorities.length) count++;
     if (dueDateFrom || dueDateTo) count++;
+    if (createdFrom || createdTo) count++;
     if (filterAssignedTo) count++;
     if (filterAssignedBy) count++;
     if (overdueOnly) count++;
@@ -629,6 +698,7 @@ export default function TaskList({ user }) {
     selectedStatuses.forEach(s => chips.push({ key: `status-${s}`, label: `Status: ${s.replace('_', ' ')}`, onRemove: () => toggleStatusFilter(s) }));
     selectedPriorities.forEach(p => chips.push({ key: `priority-${p}`, label: `Priority: ${p}`, onRemove: () => togglePriorityFilter(p) }));
     if (dueDateFrom || dueDateTo) chips.push({ key: 'dueDate', label: 'Due date filter', onRemove: () => { setDueDateFrom(''); setDueDateTo(''); } });
+    if (createdFrom || createdTo) chips.push({ key: 'createdDate', label: 'Created date filter', onRemove: () => { setCreatedFrom(''); setCreatedTo(''); } });
     if (filterAssignedTo) { const u = users.find(x => x.id === filterAssignedTo); chips.push({ key: 'assignedTo', label: `Owner: ${u?.name || 'Unknown'}`, onRemove: () => setFilterAssignedTo('') }); }
     if (filterAssignedBy) { const u = users.find(x => x.id === filterAssignedBy); chips.push({ key: 'assignedBy', label: `By: ${u?.name || 'Unknown'}`, onRemove: () => setFilterAssignedBy('') }); }
     if (overdueOnly) chips.push({ key: 'overdue', label: 'Overdue Only', onRemove: () => setOverdueOnly(false) });
@@ -666,7 +736,7 @@ export default function TaskList({ user }) {
   const canEditNotif = !editingTask ? true : canModifyNotifications(user, editingTask, users);
 
   const hasFilters = myTasksOnly || searchQuery || selectedStatuses.length > 0 || selectedPriorities.length > 0
-    || dueDateFrom || dueDateTo || filterAssignedTo || filterAssignedBy
+    || dueDateFrom || dueDateTo || createdFrom || createdTo || filterAssignedTo || filterAssignedBy
     || overdueOnly || parentRecurringOnly || filterStatus !== 'all';
 
   const STATUS_TABS = [
@@ -679,7 +749,6 @@ export default function TaskList({ user }) {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -689,65 +758,35 @@ export default function TaskList({ user }) {
           </p>
         </div>
 
-        {/* ✅ Updated Dialog Code Inserted Here */}
-        <Dialog
-          open={isDialogOpen}
-          onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}
-        >
+        <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>
             <Button className="shrink-0">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Work Item
+              <Plus className="mr-2 h-4 w-4" /> Create Work Item
             </Button>
           </DialogTrigger>
 
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
-                {editingTask ? "Edit Work Item" : "Create New Work Item"}
-              </DialogTitle>
-              <DialogDescription className="sr-only">
-                Enter the details for the work item here.
-              </DialogDescription>
+              <DialogTitle>{editingTask ? "Edit Work Item" : "Create New Work Item"}</DialogTitle>
+              <DialogDescription className="sr-only">Enter the details for the work item here.</DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 mt-4">
               <div>
                 <Label>Title *</Label>
-                <Input
-                  value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
-                />
+                <Input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
               </div>
 
               <div>
                 <Label>Description</Label>
-                <Textarea
-                  value={formData.description}
-                  rows={3}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                />
+                <Textarea value={formData.description} rows={3} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Priority</Label>
-                  <Select
-                    value={formData.priority}
-                    onValueChange={(v) =>
-                      setFormData({ ...formData, priority: v })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={formData.priority} onValueChange={(v) => setFormData({ ...formData, priority: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="low">Low</SelectItem>
                       <SelectItem value="medium">Medium</SelectItem>
@@ -759,49 +798,263 @@ export default function TaskList({ user }) {
 
                 <div>
                   <Label>Responsible Owner *</Label>
-                  <Select
-                    value={formData.assigned_to}
-                    onValueChange={(v) =>
-                      setFormData({ ...formData, assigned_to: v })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select user" />
-                    </SelectTrigger>
+                  <Select value={formData.assigned_to} onValueChange={(v) => setFormData({ ...formData, assigned_to: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
                     <SelectContent>
                       {users.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.name} ({u.department})
-                        </SelectItem>
+                        <SelectItem key={u.id} value={u.id}>{u.name} ({u.department})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              {/* Enhanced Due Date Field */}
               <div>
                 <Label>Due Date & Time *</Label>
                 <div className="relative">
-                  <Input
-                    ref={dueDateRef}
-                    type="datetime-local"
-                    value={formData.due_date}
-                    onChange={(e) =>
-                      setFormData({ ...formData, due_date: e.target.value })
-                    }
-                    className="pr-10 cursor-pointer"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => dueDateRef.current?.showPicker?.()}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-muted"
-                    tabIndex={-1}
-                  >
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                  </button>
+                  <Input ref={dueDateRef} type="datetime-local" value={formData.due_date}
+                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                    className="pr-10 cursor-pointer dark:scheme-dark dark:[&::-webkit-calendar-picker-indicator]:invert" />
                 </div>
               </div>
+
+              {/*Recurring Task Section */}
+              {canEditRec && !isChildTask && (
+                <div className="border-t pt-4 mt-4">
+                  <div
+                    className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg cursor-pointer hover:bg-secondary/70 transition-colors"
+                    onClick={() => handleRecurrenceToggle(!formData.recurrence.enabled)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Repeat className={`h-5 w-5 ${formData.recurrence.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <div>
+                        <Label className="text-sm font-medium cursor-pointer">Make this a Recurring Task</Label>
+                        <p className="text-xs text-muted-foreground">
+                          {formData.recurrence.enabled ? `Repeats ${formData.recurrence.frequency}` : 'Create automatic task instances on a schedule'}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch checked={formData.recurrence.enabled} onCheckedChange={handleRecurrenceToggle} />
+                  </div>
+
+                  <AnimatePresence>
+                    {showRecurrenceSettings && formData.recurrence.enabled && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                        <div className="mt-4 p-4 border rounded-lg bg-background space-y-4">
+                          <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                            <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+                            <p className="text-xs text-blue-800 dark:text-blue-200">
+                              New task instances will be automatically created based on this schedule. Each instance is an independent task.
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-xs">Frequency</Label>
+                              <Select value={formData.recurrence.frequency} onValueChange={(v) => setFormData({ ...formData, recurrence: { ...formData.recurrence, frequency: v, days_of_week: [] } })}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="daily">Daily</SelectItem>
+                                  <SelectItem value="weekly">Weekly</SelectItem>
+                                  <SelectItem value="monthly">Monthly</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-xs">Every</Label>
+                              <div className="flex items-center gap-2">
+                                <Input type="number" min="1" value={formData.recurrence.interval}
+                                  onChange={(e) => {
+                                    const value = parseInt(e.target.value) || 0;
+                                    setFormData({ ...formData, recurrence: { ...formData.recurrence, interval: value } });
+                                  }}
+                                  className={`w-20 ${formData.recurrence.interval < 1 ? 'border-red-500' : ''}`} />
+                                <span className="text-xs text-muted-foreground">
+                                  {formData.recurrence.frequency === 'daily' ? 'day(s)' : formData.recurrence.frequency === 'weekly' ? 'week(s)' : 'month(s)'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {formData.recurrence.frequency === 'weekly' && (
+                            <div>
+                              <Label className="text-xs mb-2 block">Repeat on</Label>
+                              <div className="flex gap-2 flex-wrap">
+                                {WEEKDAYS.map((day) => (
+                                  <button key={day.value} type="button" onClick={() => toggleWeekday(day.value)}
+                                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${formData.recurrence.days_of_week?.includes(day.value) ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input hover:bg-secondary'}`}>
+                                    {day.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-xs">End Date (optional)</Label>
+                              <Input type="date" value={formData.recurrence.end_date} onChange={(e) => setFormData({ ...formData, recurrence: { ...formData.recurrence, end_date: e.target.value } })}
+                                className="dark:scheme-dark dark:[&::-webkit-calendar-picker-indicator]:invert" />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Max Occurrences (optional)</Label>
+                              <Input type="number" min="1" placeholder="No limit" value={formData.recurrence.max_occurrences || ''}
+                                onChange={(e) => setFormData({ ...formData, recurrence: { ...formData.recurrence, max_occurrences: e.target.value ? parseInt(e.target.value) : null } })} />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs">Due In (days from creation)</Label>
+                            <Input type="number" min="1" value={formData.recurrence.due_in_days || 1}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value) || 0;
+                                setFormData({ ...formData, recurrence: { ...formData.recurrence, due_in_days: value } });
+                              }}
+                              className={`w-24 ${formData.recurrence.due_in_days < 1 ? 'border-red-500' : ''}`} />
+                            <p className="text-xs text-muted-foreground">Child tasks will be due this many days after creation</p>
+                          </div>
+
+                          {/* Calendar Override Inside Form */}
+                          <div className="border-t pt-4 mt-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <Label className="text-xs font-medium">Override Calendar Settings</Label>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {formData.recurrence_override.enabled ? 'Using task-specific calendar settings' : 'Using global calendar settings'}
+                                </p>
+                              </div>
+                              <Switch checked={formData.recurrence_override.enabled}
+                                onCheckedChange={(checked) => setFormData({
+                                  ...formData, recurrence_override: {
+                                    ...formData.recurrence_override, enabled: checked,
+                                    ...(checked && globalRecurrenceSettings ? { avoid_weekends: globalRecurrenceSettings.avoid_weekends, avoid_holidays: globalRecurrenceSettings.avoid_holidays } : {})
+                                  }
+                                })} />
+                            </div>
+
+                            {formData.recurrence_override.enabled && (
+                              <div className="space-y-4 pl-2 border-l-2 border-primary/30">
+                                <div>
+                                  <Label className="text-xs">Weekend Avoidance</Label>
+                                  <Select value={formData.recurrence_override.avoid_weekends} onValueChange={(value) => setFormData({ ...formData, recurrence_override: { ...formData.recurrence_override, avoid_weekends: value } })}>
+                                    <SelectTrigger className="mt-1 text-xs"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">No weekend skip</SelectItem>
+                                      <SelectItem value="sunday_only">Skip Sundays only</SelectItem>
+                                      <SelectItem value="sat_sun">Skip Saturday & Sunday</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <Label className="text-xs">Avoid Holidays</Label>
+                                  </div>
+                                  <Switch checked={formData.recurrence_override.avoid_holidays}
+                                    onCheckedChange={(checked) => setFormData({ ...formData, recurrence_override: { ...formData.recurrence_override, avoid_holidays: checked } })} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {/* RESTORED: Notification Override Section */}
+              {canEditNotif && (
+                <div className="border-t pt-4 mt-4">
+                  <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg cursor-pointer hover:bg-secondary/70 transition-colors"
+                    onClick={() => handleNotificationToggle(!formData.notifications.enabled)}>
+                    <div className="flex items-center gap-3">
+                      {formData.notifications.enabled ? <Bell className="h-5 w-5 text-primary" /> : <BellOff className="h-5 w-5 text-muted-foreground" />}
+                      <div>
+                        <Label className="text-sm font-medium cursor-pointer">Override Notification Settings</Label>
+                        <p className="text-xs text-muted-foreground">{formData.notifications.enabled ? 'Using task-specific notification settings' : 'Using global notification settings'}</p>
+                      </div>
+                    </div>
+                    <Switch checked={formData.notifications.enabled} onCheckedChange={handleNotificationToggle} />
+                  </div>
+
+                  <AnimatePresence>
+                    {showNotificationSettings && formData.notifications.enabled && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                        <div className="mt-4 p-4 border rounded-lg bg-background space-y-4">
+                          {/* Deadline Alerts */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs font-medium">Deadline Alerts</Label>
+                              <Button type="button" variant="outline" size="sm" onClick={addDeadlineAlert}>
+                                <Plus className="h-3 w-3 mr-1" /> Add Alert
+                              </Button>
+                            </div>
+                            {formData.notifications.deadline_alerts.map((alert, index) => {
+                              const isInvalid = alert.hours_before === '' || parseInt(alert.hours_before) < 1;
+                              return (
+                                <div key={index} className="space-y-1">
+                                  <div className="flex items-center gap-3 p-2 bg-secondary/30 rounded">
+                                    <Switch checked={alert.enabled} onCheckedChange={(checked) => updateDeadlineAlert(index, 'enabled', checked)} />
+                                    <Input type="text" inputMode="numeric" pattern="[0-9]*" value={alert.hours_before}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || /^\d+$/.test(val)) updateDeadlineAlert(index, 'hours_before', val);
+                                      }}
+                                      className={`w-20 h-8 text-xs ${isInvalid ? 'border-red-500' : ''}`} placeholder="24" />
+                                    <span className="text-xs text-muted-foreground">hrs before</span>
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => removeDeadlineAlert(index)} className="ml-auto text-destructive h-8 w-8 p-0">
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Reminder Digests */}
+                          <div className="space-y-3 pt-3 border-t">
+                            <Label className="text-xs font-medium">Include in Reminder Digests</Label>
+                            <div className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                              <Label className="text-xs">Start of Day Digest</Label>
+                              <Switch checked={formData.notifications.reminder_digests.start_of_day}
+                                onCheckedChange={(checked) => setFormData({ ...formData, notifications: { ...formData.notifications, reminder_digests: { ...formData.notifications.reminder_digests, start_of_day: checked } } })} />
+                            </div>
+                            <div className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                              <Label className="text-xs">End of Day Digest</Label>
+                              <Switch checked={formData.notifications.reminder_digests.end_of_day}
+                                onCheckedChange={(checked) => setFormData({ ...formData, notifications: { ...formData.notifications, reminder_digests: { ...formData.notifications.reminder_digests, end_of_day: checked } } })} />
+                            </div>
+                          </div>
+
+                          {/* Overdue Escalation */}
+                          <div className="space-y-3 pt-3 border-t">
+                            <Label className="text-xs font-medium">Overdue Escalation</Label>
+                            <div className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                              <Label className="text-xs">Enable Overdue Alerts</Label>
+                              <Switch checked={formData.notifications.overdue_escalation.enabled}
+                                onCheckedChange={(checked) => setFormData({ ...formData, notifications: { ...formData.notifications, overdue_escalation: { ...formData.notifications.overdue_escalation, enabled: checked } } })} />
+                            </div>
+                            {formData.notifications.overdue_escalation.enabled && (
+                              <>
+                                <div className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                                  <Label className="text-xs">Notify Task Creator</Label>
+                                  <Switch checked={formData.notifications.overdue_escalation.notify_creator}
+                                    onCheckedChange={(checked) => setFormData({ ...formData, notifications: { ...formData.notifications, overdue_escalation: { ...formData.notifications.overdue_escalation, notify_creator: checked } } })} />
+                                </div>
+                                <div className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                                  <Label className="text-xs">Notify Admin</Label>
+                                  <Switch checked={formData.notifications.overdue_escalation.notify_admin}
+                                    onCheckedChange={(checked) => setFormData({ ...formData, notifications: { ...formData.notifications, overdue_escalation: { ...formData.notifications.overdue_escalation, notify_admin: checked } } })} />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
 
               <div className="flex gap-2 pt-2">
                 <Button className="w-full" onClick={handleSubmit}>
@@ -930,13 +1183,24 @@ export default function TaskList({ user }) {
                       </div>
                     </div>
                   </div>
+
+                  {/* RESTORED: Both Due Date and Created Date filtering panels side-by-side */}
                   <div>
                     <Label className="mb-2 block text-xs uppercase tracking-wider text-muted-foreground">Due Date Range</Label>
                     <div className="space-y-2">
-                      <Input type="datetime-local" value={dueDateFrom} onChange={e => { setDueDateFrom(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }} />
-                      <Input type="datetime-local" value={dueDateTo} onChange={e => { setDueDateTo(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }} />
+                      <Input type="datetime-local" value={dueDateFrom} onChange={e => { setDueDateFrom(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }} className="dark:scheme-dark dark:[&::-webkit-calendar-picker-indicator]:invert" />
+                      <Input type="datetime-local" value={dueDateTo} onChange={e => { setDueDateTo(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }} className="dark:scheme-dark dark:[&::-webkit-calendar-picker-indicator]:invert" />
                     </div>
                   </div>
+
+                  <div>
+                    <Label className="mb-2 block text-xs uppercase tracking-wider text-muted-foreground">Created Date Range</Label>
+                    <div className="space-y-2">
+                      <Input type="datetime-local" value={createdFrom} onChange={e => { setCreatedFrom(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }} className="dark:scheme-dark dark:[&::-webkit-calendar-picker-indicator]:invert" />
+                      <Input type="datetime-local" value={createdTo} onChange={e => { setCreatedTo(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }} className="dark:scheme-dark dark:[&::-webkit-calendar-picker-indicator]:invert" />
+                    </div>
+                  </div>
+
                   <div className="space-y-4">
                     <div>
                       <Label className="mb-2 block text-xs uppercase tracking-wider text-muted-foreground">Responsible Owner</Label>
@@ -1135,7 +1399,8 @@ export default function TaskList({ user }) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>End Date (optional)</Label>
-                  <Input type="date" value={recurrenceEditForm.end_date} onChange={e => setRecurrenceEditForm(f => ({ ...f, end_date: e.target.value }))} />
+                  <Input type="date" value={recurrenceEditForm.end_date} onChange={e => setRecurrenceEditForm(f => ({ ...f, end_date: e.target.value }))}
+                    className="dark:scheme-dark dark:[&::-webkit-calendar-picker-indicator]:invert" />
                 </div>
                 <div className="space-y-2">
                   <Label>Max Occurrences (optional)</Label>
