@@ -20,8 +20,11 @@ export default function DigestPopup({ onNavigateToTasks }) {
       const today = new Date().toDateString();
       const lastShown = localStorage.getItem('digest_last_shown');
 
-      // EXCELLENT FIX: Throttle using local storage (Once per day)
-      if (lastShown === today) return;
+      // If already shown today, instantly signal to the app that digest is "done"
+      if (lastShown === today) {
+        window.dispatchEvent(new CustomEvent('digestFinished', { detail: { shown: false } }));
+        return;
+      }
 
       const fetchDigests = async () => {
         try {
@@ -30,9 +33,14 @@ export default function DigestPopup({ onNavigateToTasks }) {
             localStorage.setItem('digest_last_shown', today);
             setDigest(response.data[0]);
             setIsVisible(true);
+            // We DO NOT fire the event here. We wait for the user to dismiss it.
+          } else {
+            // No digest to show, signal that we are done
+            window.dispatchEvent(new CustomEvent('digestFinished', { detail: { shown: false } }));
           }
         } catch (error) {
           console.error('Failed to check for digests:', error);
+          window.dispatchEvent(new CustomEvent('digestFinished', { detail: { shown: false } }));
         }
       };
       fetchDigests();
@@ -40,30 +48,26 @@ export default function DigestPopup({ onNavigateToTasks }) {
   }, []);
 
   const handleDismiss = () => {
-    // EXCELLENT FIX: Immediate UI closure. Never let the UI hang waiting on an API.
     setIsVisible(false);
 
-    // Fire and forget background request
     if (digest) {
       api.put(`/digest/popups/${digest.id}/seen`).catch(() => { });
     }
 
     setDigest(null);
     setExpandedTasks({});
+
+    // Signal to the app that the digest was actively shown and just closed
+    window.dispatchEvent(new CustomEvent('digestFinished', { detail: { shown: true } }));
   };
 
   const handleViewTasks = () => {
-    handleDismiss(); // Trigger instant closure and silent API call
-    if (onNavigateToTasks) {
-      onNavigateToTasks();
-    }
+    handleDismiss();
+    if (onNavigateToTasks) onNavigateToTasks();
   };
 
   const toggleTaskExpand = (taskId) => {
-    setExpandedTasks(prev => ({
-      ...prev,
-      [taskId]: !prev[taskId]
-    }));
+    setExpandedTasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
   };
 
   const getSectionIcon = (type) => {

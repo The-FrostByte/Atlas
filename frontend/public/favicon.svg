@@ -1,0 +1,15 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <mask id="favicon-mask">
+      <circle cx="50" cy="48" r="42" fill="white" />
+      <path d="M 15 105 L 50 45 L 85 105 Z" fill="black" />
+      <ellipse cx="50" cy="48" rx="20" ry="42" stroke="black" stroke-width="3" fill="none" />
+      <line x1="50" y1="6" x2="50" y2="90" stroke="black" stroke-width="3" />
+      <line x1="8" y1="48" x2="92" y2="48" stroke="black" stroke-width="3" />
+    </mask>
+  </defs>
+
+  <circle cx="50" cy="48" r="42" fill="hsl(239, 84%, 67%)" mask="url(#favicon-mask)" />
+  
+  <circle cx="50" cy="72" r="8" fill="#FF2E63" style="filter: drop-shadow(0px 0px 4px #FF2E63);" />
+</svg>
