@@ -131,7 +131,7 @@ export const getEmployeeLoadData = async (req, res) => {
       if (start_date && end_date) taskQuery.created_at = { $gte: start_date, $lte: end_date };
     }
 
-    // 1. Ask DB to group all relevant tasks by assignee (Lightning fast)
+    // SCALABILITY REFACTOR: Database-level aggregation
     const taskStats = await Task.aggregate([
       { $match: taskQuery },
       {
@@ -148,7 +148,6 @@ export const getEmployeeLoadData = async (req, res) => {
 
     const statsMap = new Map(taskStats.map(s => [s._id, s]));
 
-    // 2. Fetch scoped users based on roles
     let scopedUsers;
     if (role === 'manager') {
       const assigneeIds = Array.from(statsMap.keys());
@@ -161,7 +160,6 @@ export const getEmployeeLoadData = async (req, res) => {
       scopedUsers = await User.find({}).select('id name department').lean();
     }
 
-    // 3. Map users to their pre-calculated stats (Preserves users with 0 tasks)
     const employee_data = scopedUsers.map(u => {
       const stats = statsMap.get(u.id) || { total: 0, completed: 0, in_progress: 0, pending: 0, overdue: 0 };
       return {

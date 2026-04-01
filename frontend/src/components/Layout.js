@@ -5,7 +5,7 @@ import {
   Home, ClipboardList, Calendar, Users, Bell, LogOut,
   Settings, Repeat, X, PanelLeftClose, PanelLeftOpen,
   CheckCheck, Clock, Sun, Moon, UserCircle, Pencil,
-  Mail, Phone, Building2, ShieldCheck, ChevronRight, Save, Loader2
+  Building2, ShieldCheck, ChevronRight, Save, Loader2
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -56,39 +56,13 @@ function useDarkMode() {
   return [isDark, setIsDark];
 }
 
-// ─── NavItem ──────────────────────────────────────────────────────────────────
 function NavItem({ item, isActive, isCollapsed, onNavigate }) {
   const button = (
-    <button
-      onClick={onNavigate}
-      className={`
-        relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium
-        transition-all duration-150 group outline-none
-        ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'}
-        ${isCollapsed ? 'justify-center px-0' : ''}
-      `}
-    >
-      {isActive && (
-        isCollapsed ? (
-          <span className="absolute left-0 inset-y-0 my-auto w-0.5 h-5 bg-primary rounded-r-full" />
-        ) : (
-          <motion.span
-            layoutId="nav-active-bar"
-            className="absolute left-0 inset-y-0 my-auto w-0.5 h-5 bg-primary rounded-r-full"
-            transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-          />
-        )
-      )}
+    <button onClick={onNavigate} className={`relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 group outline-none ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'} ${isCollapsed ? 'justify-center px-0' : ''}`}>
+      {isActive && (isCollapsed ? <span className="absolute left-0 inset-y-0 my-auto w-0.5 h-5 bg-primary rounded-r-full" /> : <motion.span layoutId="nav-active-bar" className="absolute left-0 inset-y-0 my-auto w-0.5 h-5 bg-primary rounded-r-full" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />)}
       <item.icon className={`h-[18px] w-[18px] shrink-0 transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
       <AnimatePresence initial={false}>
-        {!isCollapsed && (
-          <motion.span key="label"
-            initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }}
-            exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.18, ease: 'easeInOut' }}
-            className="overflow-hidden whitespace-nowrap">
-            {item.name}
-          </motion.span>
-        )}
+        {!isCollapsed && <motion.span key="label" initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.18, ease: 'easeInOut' }} className="overflow-hidden whitespace-nowrap">{item.name}</motion.span>}
       </AnimatePresence>
     </button>
   );
@@ -106,33 +80,21 @@ function NavItem({ item, isActive, isCollapsed, onNavigate }) {
   return button;
 }
 
-// ─── SidebarContent ───────────────────────────────────────────────────────────
-function SidebarContent({
-  isCollapsed, isMobile, menuItems, currentPath,
-  onNavigate, onToggleCollapse, onCloseMobile, user, initials, roleStyle,
-}) {
+function SidebarContent({ isCollapsed, isMobile, menuItems, currentPath, onNavigate, onToggleCollapse, onCloseMobile }) {
   return (
     <div className="flex flex-col h-full w-full">
       <div className={`h-16 flex items-center shrink-0 border-b border-border/60 ${isCollapsed && !isMobile ? 'justify-center px-0' : 'px-3'}`}>
         {isMobile ? (
-          <button onClick={onCloseMobile}
-            className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-            aria-label="Close sidebar">
-            <X className="h-4 w-4" />
-          </button>
+          <button onClick={onCloseMobile} className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors" aria-label="Close sidebar"><X className="h-4 w-4" /></button>
         ) : (
           <TooltipProvider>
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <button onClick={onToggleCollapse}
-                  className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                  aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+                <button onClick={onToggleCollapse} className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors" aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
                   {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right" className="text-xs font-medium">
-                {isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              </TooltipContent>
+              <TooltipContent side="right" className="text-xs font-medium">{isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}
@@ -140,11 +102,7 @@ function SidebarContent({
 
       <nav className={`flex-1 overflow-y-auto py-4 space-y-0.5 ${isCollapsed && !isMobile ? 'px-2' : 'px-3'}`}>
         {menuItems.map(item => (
-          <NavItem key={item.path} item={item}
-            isActive={currentPath === item.path}
-            isCollapsed={isCollapsed && !isMobile}
-            onNavigate={() => { onNavigate(item.path); if (isMobile) onCloseMobile(); }}
-          />
+          <NavItem key={item.path} item={item} isActive={currentPath === item.path} isCollapsed={isCollapsed && !isMobile} onNavigate={() => { onNavigate(item.path); if (isMobile) onCloseMobile(); }} />
         ))}
       </nav>
     </div>
@@ -153,8 +111,7 @@ function SidebarContent({
 
 function NotificationItem({ n, onClick }) {
   return (
-    <button onClick={onClick}
-      className={`w-full text-left p-3 rounded-lg transition-all duration-150 ${n.is_read ? 'hover:bg-muted/50 opacity-60' : 'bg-primary/5 hover:bg-primary/10 border-l-2 border-primary'}`}>
+    <button onClick={onClick} className={`w-full text-left p-3 rounded-lg transition-all duration-150 ${n.is_read ? 'hover:bg-muted/50 opacity-60' : 'bg-primary/5 hover:bg-primary/10 border-l-2 border-primary'}`}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <p className={`text-sm truncate ${n.is_read ? 'font-normal' : 'font-semibold text-foreground'}`}>{n.title}</p>
@@ -172,22 +129,21 @@ function NotificationItem({ n, onClick }) {
   );
 }
 
-// ─── Main Layout ──────────────────────────────────────────────────────────────
 export default function Layout({ user, children }) {
   const navigate = useNavigate();
   const location = useLocation();
-
-  // THE FIX: Extract 'subscribe' from WebSocketContext instead of 'socket'
   const { subscribe } = useWebSocket();
-
   const [isDark, setIsDark] = useDarkMode();
   const [notifications, setNotifications] = useState([]);
-  const [isCollapsed, setIsCollapsed] = useState(() =>
-    localStorage.getItem('sidebar-collapsed') === 'true'
-  );
+  const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isFirstCheckDone, setIsFirstCheckDone] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
+
+  // SEQUENCING STATE
+  const [digestFinished, setDigestFinished] = useState(false);
+  const [digestWasShown, setDigestWasShown] = useState(false);
+  const [popupState, setPopupState] = useState({ show: false, mode: 'welcome', activeNotif: null });
 
   const [localUser, setLocalUser] = useState(user);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -206,14 +162,10 @@ export default function Layout({ user, children }) {
 
   const openEditDialog = () => {
     setEditForm({
-      name: localUser?.name || '',
-      email: localUser?.email || '',
-      phone: localUser?.phone || '',
-      department: localUser?.department || '',
-      role: localUser?.role || 'member',
+      name: localUser?.name || '', email: localUser?.email || '', phone: localUser?.phone || '',
+      department: localUser?.department || '', role: localUser?.role || 'member',
     });
-    setProfileOpen(false);
-    setEditOpen(true);
+    setProfileOpen(false); setEditOpen(true);
   };
 
   const handleProfileSave = async () => {
@@ -228,9 +180,7 @@ export default function Layout({ user, children }) {
     } catch (err) {
       if (err.response?.status === 403) toast.error('Only admins can update user profiles');
       else toast.error(err.response?.data?.message || 'Failed to update profile');
-    } finally {
-      setSavingProfile(false);
-    }
+    } finally { setSavingProfile(false); }
   };
 
   useEffect(() => {
@@ -240,41 +190,70 @@ export default function Layout({ user, children }) {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  // 1. Fetch initial state ONLY ONCE on mount
+  // 1. Initial Load & Event Listener Setup
   useEffect(() => {
     loadNotifications();
+
+    // Safety net: if DigestPopup fails to fire for any reason, unlock after 3 seconds.
+    const fallbackTimer = setTimeout(() => {
+      if (!digestFinished) setDigestFinished(true);
+    }, 3000);
+
+    const handleDigestFinished = (e) => {
+      setDigestWasShown(e.detail?.shown || false);
+      setDigestFinished(true);
+      clearTimeout(fallbackTimer);
+    };
+
+    window.addEventListener('digestFinished', handleDigestFinished);
+    return () => {
+      window.removeEventListener('digestFinished', handleDigestFinished);
+      clearTimeout(fallbackTimer);
+    };
   }, []);
 
-  // 2. WebSocket Listener for real-time pushed notifications
+  // 2. SEQUENCED WELCOME BACK POPUP
+  useEffect(() => {
+    // Only evaluate IF digest is finished, notifications are loaded, and we are on dashboard
+    if (isFirstCheckDone && digestFinished && location.pathname === '/') {
+      const evaluated = sessionStorage.getItem('welcome_notifs_evaluated');
+      if (!evaluated) {
+        sessionStorage.setItem('welcome_notifs_evaluated', 'true');
+        const unread = notifications.filter(n => !n.is_read);
+
+        if (unread.length > 0) {
+          // Elegant breather: 1.5 seconds if they just dismissed a digest, 600ms if not.
+          const delay = digestWasShown ? 1500 : 600;
+
+          setTimeout(() => {
+            if (window.location.pathname === '/') {
+              setPopupState({ show: true, mode: 'welcome', activeNotif: null });
+            }
+          }, delay);
+        }
+      }
+    }
+  }, [isFirstCheckDone, digestFinished, digestWasShown, location.pathname, notifications]);
+
+  // 3. WEBSOCKET REAL-TIME LISTENER (Fresh Notification Override)
   useEffect(() => {
     const handleNewNotification = (newNotif) => {
       setNotifications(prev => [newNotif, ...prev]);
-
       if (!globalShownToastIds.has(newNotif.id)) {
         globalShownToastIds.add(newNotif.id);
-        toast(newNotif.title, {
-          description: newNotif.message,
-          duration: 4000,
-          icon: <Bell className="h-4 w-4 text-primary" />,
-          action: { label: 'View', onClick: () => handleNotificationClick(newNotif) },
-        });
+
+        // Instantly overrides and shows the new notification
+        setPopupState({ show: true, mode: 'fresh', activeNotif: newNotif });
       }
     };
-
-    // Use the subscribe method from Context
     const unsubscribe = subscribe('NEW_NOTIFICATION', handleNewNotification);
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    return () => { if (unsubscribe) unsubscribe(); };
   }, [subscribe]);
 
   const loadNotifications = async () => {
     try {
       const { data } = await api.get('/notifications');
-      data.forEach((n) => {
-        if (!n.is_read) globalShownToastIds.add(n.id);
-      });
+      data.forEach((n) => { if (!n.is_read) globalShownToastIds.add(n.id); });
       setNotifications(data);
       setIsFirstCheckDone(true);
     } catch { console.error('Failed to load notifications'); }
@@ -309,9 +288,7 @@ export default function Layout({ user, children }) {
     { name: 'Schedule', path: '/schedule', icon: Calendar },
     { name: 'Team', path: '/users', icon: Users },
   ];
-  if (localUser?.role === 'admin') {
-    menuItems.push({ name: 'Settings', path: '/settings', icon: Settings });
-  }
+  if (localUser?.role === 'admin') menuItems.push({ name: 'Settings', path: '/settings', icon: Settings });
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
   const initials = getInitials(localUser?.name);
@@ -319,32 +296,120 @@ export default function Layout({ user, children }) {
   const isAdmin = localUser?.role === 'admin';
 
   const sidebarSharedProps = {
-    menuItems,
-    currentPath: location.pathname,
-    onNavigate: (path) => navigate(path),
-    onToggleCollapse: () => setIsCollapsed(p => {
-      const next = !p;
-      localStorage.setItem('sidebar-collapsed', String(next));
-      return next;
-    }),
-    onCloseMobile: () => setMobileSidebarOpen(false),
-    user: localUser, initials, roleStyle,
+    menuItems, currentPath: location.pathname, onNavigate: (path) => navigate(path),
+    onToggleCollapse: () => setIsCollapsed(p => { const next = !p; localStorage.setItem('sidebar-collapsed', String(next)); return next; }),
+    onCloseMobile: () => setMobileSidebarOpen(false), user: localUser, initials, roleStyle,
   };
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
+
+      {/* ── UNIFIED ELEGANT NOTIFICATION MODAL ── */}
+      <AnimatePresence>
+        {popupState.show && (
+          <div className="relative z-[150]">
+            {/* Blurred Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-background/80 backdrop-blur-sm"
+              onClick={() => setPopupState({ ...popupState, show: false })}
+            />
+            {/* Centered Modal */}
+            <div className="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                className="bg-card w-full max-w-md rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] border border-border/50 overflow-hidden pointer-events-auto flex flex-col max-h-[85vh] ring-1 ring-primary/20"
+              >
+                {/* Header */}
+                <div className={`p-6 relative shrink-0 ${popupState.mode === 'welcome' ? 'bg-gradient-to-br from-primary/15 via-primary/5 to-transparent' : 'bg-gradient-to-br from-blue-500/15 via-blue-500/5 to-transparent'}`}>
+                  <button onClick={() => setPopupState({ ...popupState, show: false })} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground bg-background/50 rounded-full p-1 transition-colors">
+                    <X className="h-4 w-4" />
+                  </button>
+
+                  {popupState.mode === 'welcome' ? (
+                    <>
+                      <div className="h-12 w-12 rounded-xl bg-primary/20 flex items-center justify-center mb-4 shadow-inner ring-1 ring-primary/30">
+                        <Bell className="h-6 w-6 text-primary" />
+                      </div>
+                      <h2 className="text-2xl font-bold tracking-tight text-foreground">Welcome back, {localUser?.name.split(' ')[0]}!</h2>
+                      <p className="text-sm text-muted-foreground mt-1">You have <span className="font-semibold text-primary">{unreadCount}</span> unread notification{unreadCount !== 1 ? 's' : ''}.</p>
+                    </>
+                  ) : (
+                    <>
+                      <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }} className="h-12 w-12 rounded-xl bg-blue-500/20 flex items-center justify-center mb-4 shadow-inner ring-1 ring-blue-500/30">
+                        <Bell className="h-6 w-6 text-blue-500" />
+                      </motion.div>
+                      <h2 className="text-2xl font-bold tracking-tight text-foreground">New Update</h2>
+                      <p className="text-sm text-muted-foreground mt-1">Just arrived while you were working.</p>
+                    </>
+                  )}
+                </div>
+
+                {/* SCROLLABLE CONTENT AREA - FIXED WITH NATIVE SCROLL DIV */}
+                <div className="flex-1 overflow-y-auto p-3 bg-muted/10 min-h-0 custom-scrollbar">
+                  <div className="space-y-1.5">
+                    {popupState.mode === 'welcome'
+                      ? notifications.filter(n => !n.is_read).map(n => (
+                        <NotificationItem key={n.id} n={n} onClick={() => { handleNotificationClick(n); setPopupState({ ...popupState, show: false }); }} />
+                      ))
+                      : popupState.activeNotif && (
+                        <NotificationItem n={popupState.activeNotif} onClick={() => { handleNotificationClick(popupState.activeNotif); setPopupState({ ...popupState, show: false }); }} />
+                      )
+                    }
+                  </div>
+                </div>
+
+                {/* Empathetic Rain-Check Footer */}
+                <div className="p-4 border-t border-border/50 bg-background flex gap-3 shrink-0">
+                  <Button variant="outline" className="flex-1" onClick={() => setPopupState({ ...popupState, show: false })}>
+                    I'll review later
+                  </Button>
+                  {popupState.mode === 'welcome' ? (
+                    <Button className="flex-1 shadow-md" onClick={() => { markAllAsRead(); setPopupState({ ...popupState, show: false }); }}>
+                      <CheckCheck className="h-4 w-4 mr-2" /> Mark All Read
+                    </Button>
+                  ) : (
+                    <Button className="flex-1 shadow-md" onClick={() => { handleNotificationClick(popupState.activeNotif); setPopupState({ ...popupState, show: false }); }}>
+                      View Details
+                    </Button>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* ─────────────────────────────────────── */}
+
       <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
         <div className="px-4 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-foreground shrink-0"
-              onClick={() => setMobileSidebarOpen(true)} aria-label="Open menu">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+            <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-foreground shrink-0" onClick={() => setMobileSidebarOpen(true)} aria-label="Open menu">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
             </Button>
-            <button onClick={() => navigate('/')} className="flex items-baseline gap-1.5 transition-opacity focus:outline-none">
-              <span className="text-[26px] font-bold text-primary tracking-tight">Atlas</span>
-              <span className="text-[11px] font-medium text-muted-foreground tracking-wide">by Lyor</span>
+            <button onClick={() => navigate('/')} className="flex items-center gap-2.5 transition-opacity hover:opacity-80 focus:outline-none">
+              <svg viewBox="0 0 100 100" className="h-[30px] w-[30px] shrink-0" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <mask id="globe-mask">
+                    <circle cx="50" cy="48" r="42" fill="white" />
+                    <path d="M 15 105 L 50 45 L 85 105 Z" fill="black" />
+                  </mask>
+                </defs>
+                <g mask="url(#globe-mask)">
+                  <circle cx="50" cy="48" r="42" className="fill-primary" />
+                  <ellipse cx="50" cy="48" rx="20" ry="42" className="stroke-background" strokeWidth="2.5" fill="none" />
+                  <line x1="50" y1="6" x2="50" y2="90" className="stroke-background" strokeWidth="2.5" />
+                  <line x1="8" y1="48" x2="92" y2="48" className="stroke-background" strokeWidth="2.5" />
+                </g>
+                <circle cx="50" cy="72" r="8" fill="#FF2E63" style={{ filter: 'drop-shadow(0px 0px 4px #FF2E63)' }} />
+              </svg>
+              <div className="flex flex-col items-start justify-center -space-y-1 pb-1">
+                <span className="text-xl font-black text-foreground tracking-tight leading-none gap-2 mb-0.5">Atlas</span>
+                <span className="text-[8px] font-semibold text-muted-foreground tracking-[0.2em] uppercase ml-[1px]">By Lyor</span>
+              </div>
             </button>
           </div>
 
@@ -355,13 +420,9 @@ export default function Layout({ user, children }) {
                   <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground rounded-full" onClick={() => setIsDark(d => !d)}>
                     <AnimatePresence mode="wait" initial={false}>
                       {isDark ? (
-                        <motion.span key="sun" initial={{ rotate: -90, opacity: 0, scale: 0.8 }} animate={{ rotate: 0, opacity: 1, scale: 1 }} exit={{ rotate: 90, opacity: 0, scale: 0.8 }} transition={{ duration: 0.18 }} className="flex">
-                          <Sun className="h-[18px] w-[18px]" />
-                        </motion.span>
+                        <motion.span key="sun" initial={{ rotate: -90, opacity: 0, scale: 0.8 }} animate={{ rotate: 0, opacity: 1, scale: 1 }} exit={{ rotate: 90, opacity: 0, scale: 0.8 }} transition={{ duration: 0.18 }} className="flex"><Sun className="h-[18px] w-[18px]" /></motion.span>
                       ) : (
-                        <motion.span key="moon" initial={{ rotate: 90, opacity: 0, scale: 0.8 }} animate={{ rotate: 0, opacity: 1, scale: 1 }} exit={{ rotate: -90, opacity: 0, scale: 0.8 }} transition={{ duration: 0.18 }} className="flex">
-                          <Moon className="h-[18px] w-[18px]" />
-                        </motion.span>
+                        <motion.span key="moon" initial={{ rotate: 90, opacity: 0, scale: 0.8 }} animate={{ rotate: 0, opacity: 1, scale: 1 }} exit={{ rotate: -90, opacity: 0, scale: 0.8 }} transition={{ duration: 0.18 }} className="flex"><Moon className="h-[18px] w-[18px]" /></motion.span>
                       )}
                     </AnimatePresence>
                   </Button>
@@ -376,8 +437,7 @@ export default function Layout({ user, children }) {
                   <Bell className="h-[18px] w-[18px]" />
                   <AnimatePresence>
                     {unreadCount > 0 && (
-                      <motion.span key="badge" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
-                        className="absolute -top-0.5 -right-0.5 h-4 min-w-4 flex items-center justify-center px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
+                      <motion.span key="badge" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="absolute -top-0.5 -right-0.5 h-4 min-w-4 flex items-center justify-center px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
                         {unreadCount > 9 ? '9+' : unreadCount}
                       </motion.span>
                     )}
@@ -390,33 +450,24 @@ export default function Layout({ user, children }) {
                     <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
                     {unreadCount > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{unreadCount} new</span>}
                   </div>
-                  {unreadCount > 0 && (
-                    <button onClick={markAllAsRead} disabled={markingAll} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50">
-                      <CheckCheck className="h-3.5 w-3.5" />{markingAll ? 'Marking…' : 'Mark all read'}
-                    </button>
-                  )}
+                  {unreadCount > 0 && <button onClick={markAllAsRead} disabled={markingAll} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"><CheckCheck className="h-3.5 w-3.5" />{markingAll ? 'Marking…' : 'Mark all read'}</button>}
                 </div>
+                {/* Regular bell popover uses a fixed height ScrollArea which works fine */}
                 <ScrollArea className="h-[320px]">
                   {notifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 gap-2">
-                      <div className="h-10 w-10 rounded-full bg-muted/60 flex items-center justify-center">
-                        <Bell className="h-5 w-5 text-muted-foreground/50" />
-                      </div>
+                      <div className="h-10 w-10 rounded-full bg-muted/60 flex items-center justify-center"><Bell className="h-5 w-5 text-muted-foreground/50" /></div>
                       <p className="text-sm text-muted-foreground font-medium">All caught up</p>
                     </div>
                   ) : (
                     <div className="p-2 space-y-0.5">
                       {notifications.some(n => !n.is_read) && (
-                        <>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 pt-1.5 pb-1">Unread</p>
-                          {notifications.filter(n => !n.is_read).map(n => <NotificationItem key={n.id} n={n} onClick={() => handleNotificationClick(n)} />)}
-                        </>
+                        <><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 pt-1.5 pb-1">Unread</p>
+                          {notifications.filter(n => !n.is_read).map(n => <NotificationItem key={n.id} n={n} onClick={() => handleNotificationClick(n)} />)}</>
                       )}
                       {notifications.some(n => n.is_read) && (
-                        <>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 pt-3 pb-1">Earlier</p>
-                          {notifications.filter(n => n.is_read).map(n => <NotificationItem key={n.id} n={n} onClick={() => handleNotificationClick(n)} />)}
-                        </>
+                        <><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 pt-3 pb-1">Earlier</p>
+                          {notifications.filter(n => n.is_read).map(n => <NotificationItem key={n.id} n={n} onClick={() => handleNotificationClick(n)} />)}</>
                       )}
                     </div>
                   )}
@@ -450,16 +501,11 @@ export default function Layout({ user, children }) {
                 </div>
                 <div className="border-t border-border/50 p-2 space-y-0.5">
                   <button onClick={openEditDialog} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 transition-colors group">
-                    <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                      <Pencil className="h-3.5 w-3.5 text-primary" />
-                    </div>
-                    <span className="flex-1 text-left">Edit Profile</span>
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors"><Pencil className="h-3.5 w-3.5 text-primary" /></div>
+                    <span className="flex-1 text-left">Edit Profile</span><ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
                   </button>
                   <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/5 transition-colors group">
-                    <div className="h-7 w-7 rounded-lg bg-destructive/10 flex items-center justify-center group-hover:bg-destructive/20 transition-colors">
-                      <LogOut className="h-3.5 w-3.5 text-destructive" />
-                    </div>
+                    <div className="h-7 w-7 rounded-lg bg-destructive/10 flex items-center justify-center group-hover:bg-destructive/20 transition-colors"><LogOut className="h-3.5 w-3.5 text-destructive" /></div>
                     <span className="flex-1 text-left">Sign Out</span>
                   </button>
                 </div>
