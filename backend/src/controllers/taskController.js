@@ -19,6 +19,22 @@ const getAssigneeUser = async (assignedToId) => {
   return User.findOne({ id: String(assignedToId) }).lean();
 };
 
+// ─── Helper: build the correct task query for a given role ───────────────────
+const buildTaskQuery = async (role, id, department) => {
+  if (role === 'admin') return {};
+  if (role === 'manager') {
+    const deptUsers = await User.find({ department }).select('id').lean();
+    const deptUserIds = deptUsers.map(u => u.id);
+    return {
+      $or: [
+        { assigned_to: { $in: deptUserIds } },
+        { assigned_by: id }
+      ]
+    };
+  }
+  return { $or: [{ assigned_to: id }, { assigned_by: id }] };
+};
+
 // ─── createTask ───────────────────────────────────────────────────────────────
 export const createTask = async (req, res) => {
   try {
@@ -40,7 +56,7 @@ export const createTask = async (req, res) => {
       assigned_by: req.user.id,
       due_date,
       is_recurring: is_recurring || false,
-     
+
       created_at: now,
       updated_at: now
     });
@@ -511,19 +527,23 @@ export const uploadTaskAttachments = async (req, res) => {
 // ─── getTaskSchedule ──────────────────────────────────────────────────────────
 export const getTaskSchedule = async (req, res) => {
   try {
-    const tasks = await Task.find({
-      $or: [{ assigned_to: req.user.id }, { assigned_by: req.user.id }],
-      status: { $ne: 'completed' }
-    }).sort({ due_date: 1 });
+    const { role, id, department } = req.user;
+    const { start_date, end_date } = req.query;
 
-    const scheduleData = tasks.reduce((acc, task) => {
-      const dateKey = task.due_date.split('T')[0];
-      if (!acc[dateKey]) acc[dateKey] = [];
-      acc[dateKey].push(task);
-      return acc;
-    }, {});
+    let query = await buildTaskQuery(role, id, department);
 
-    res.json(scheduleData);
+    // Apply the boundaries that the frontend pagination passes
+    if (start_date && end_date) {
+      query.due_date = { $gte: start_date, $lte: end_date };
+    }
+
+    // FIX: REMOVED status: { $ne: 'completed' } to allow completed tasks to show in schedule
+
+    // We lean() and send an array directly to the frontend because the DailySchedule.js
+    // adapter knows how to group these by timezone correctly.
+    const tasks = await Task.find(query).sort({ due_date: 1 }).lean();
+
+    res.json(tasks);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
