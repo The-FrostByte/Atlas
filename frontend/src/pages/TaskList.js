@@ -37,11 +37,11 @@ const WEEKDAYS = [
   { value: 6, label: 'Sun' }
 ];
 
+// UX UPGRADE: Synced perfectly with DailySchedule.js traffic light colors
 const PRIORITY_CONFIG = {
-  critical: { label: 'Critical', border: 'border-l-rose-500', badge: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400', dot: 'bg-rose-500' },
-  high: { label: 'High', border: 'border-l-orange-500', badge: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400', dot: 'bg-orange-500' },
-  medium: { label: 'Medium', border: 'border-l-yellow-500', badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400', dot: 'bg-yellow-500' },
-  low: { label: 'Low', border: 'border-l-slate-400', badge: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400', dot: 'bg-slate-400' },
+  high: { label: 'High', border: 'border-l-red-500', badge: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400', dot: 'bg-red-500' },
+  medium: { label: 'Medium', border: 'border-l-amber-500', badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400', dot: 'bg-amber-500' },
+  low: { label: 'Low', border: 'border-l-emerald-500', badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400', dot: 'bg-emerald-500' },
 };
 
 const STATUS_CONFIG = {
@@ -103,9 +103,10 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.25, ease: 'easeOut' }} data-testid={`task-item-${task.id}`}>
       <Card className={`group relative p-0 overflow-hidden transition-all duration-200 border-l-4 ${priorityCfg.border} hover:shadow-md hover:-translate-y-0.5 ${taskIsOverdue ? 'bg-red-50/30 dark:bg-red-500/5' : ''} ${isCompleted ? 'opacity-75' : ''}`}>
-        <div className="p-5">
-          <div className="flex items-start gap-4">
-            <div className="flex-1 min-w-0 space-y-2.5">
+        <div className="p-4 sm:p-5">
+          {/* UX UPGRADE: Mobile-first wrapping for action buttons */}
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="flex-1 min-w-0 space-y-2.5 w-full">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className={`text-base font-semibold leading-tight ${isCompleted ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                   {task.title}
@@ -154,10 +155,11 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
+            {/* UX UPGRADE: Actions drop down cleanly on small screens */}
+            <div className="flex items-center flex-wrap gap-1.5 shrink-0 w-full sm:w-auto sm:justify-end border-t border-border/50 sm:border-t-0 pt-3 sm:pt-0 mt-2 sm:mt-0">
               {!isCompleted && canStatus ? (
                 <Select value={task.status} onValueChange={(v) => onStatusChange(task.id, v)}>
-                  <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-full sm:w-32 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="in_progress">In Progress</SelectItem>
@@ -165,7 +167,7 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
                   </SelectContent>
                 </Select>
               ) : isCompleted ? (
-                <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 text-xs h-8 px-2.5">
+                <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 text-xs h-8 px-2.5 w-full sm:w-auto justify-center">
                   <Lock className="h-3 w-3 mr-1" />Read-only
                 </Badge>
               ) : null}
@@ -217,7 +219,7 @@ function TaskCard({ task, user, users, onEdit, onDelete, onStatusChange, onEditR
 function EmptyState({ hasFilters, onClear }) {
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-20 text-center">
+      className="flex flex-col items-center justify-center py-20 text-center px-4">
       <div className="h-16 w-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-4">
         <Flag className="h-8 w-8 text-muted-foreground/50" />
       </div>
@@ -275,8 +277,8 @@ export default function TaskList({ user }) {
   const [selectedPriorities, setSelectedPriorities] = useState([]);
   const [dueDateFrom, setDueDateFrom] = useState('');
   const [dueDateTo, setDueDateTo] = useState('');
-  const [createdFrom, setCreatedFrom] = useState(''); // Restored
-  const [createdTo, setCreatedTo] = useState('');     // Restored
+  const [createdFrom, setCreatedFrom] = useState('');
+  const [createdTo, setCreatedTo] = useState('');
   const [filterAssignedTo, setFilterAssignedTo] = useState('');
   const [filterAssignedBy, setFilterAssignedBy] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -364,7 +366,6 @@ export default function TaskList({ user }) {
     } catch { /* silent */ }
   };
 
-  // Restored: Validation for Notification Alerts
   const validateDeadlineAlerts = () => {
     const alerts = formData.notifications.deadline_alerts;
     for (let i = 0; i < alerts.length; i++) {
@@ -598,7 +599,6 @@ export default function TaskList({ user }) {
     } finally { setSavingRecurrence(false); }
   };
 
-  // Restored Recurrence Helpers
   const handleRecurrenceToggle = (enabled) => {
     setFormData({ ...formData, recurrence: { ...formData.recurrence, enabled } });
     setShowRecurrenceSettings(enabled);
@@ -750,9 +750,9 @@ export default function TaskList({ user }) {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Work Items</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Work Items</h1>
           <p className="text-muted-foreground mt-1 text-sm">
             {loading ? 'Loading…' : `${pagination.total} total tasks`}
           </p>
@@ -760,7 +760,7 @@ export default function TaskList({ user }) {
 
         <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>
-            <Button className="shrink-0">
+            <Button className="w-full sm:w-auto shrink-0">
               <Plus className="mr-2 h-4 w-4" /> Create Work Item
             </Button>
           </DialogTrigger>
@@ -782,7 +782,8 @@ export default function TaskList({ user }) {
                 <Textarea value={formData.description} rows={3} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* UX UPGRADE: Grid shifts to 1 column on very small screens */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label>Priority</Label>
                   <Select value={formData.priority} onValueChange={(v) => setFormData({ ...formData, priority: v })}>
@@ -791,7 +792,6 @@ export default function TaskList({ user }) {
                       <SelectItem value="low">Low</SelectItem>
                       <SelectItem value="medium">Medium</SelectItem>
                       <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="critical">Critical</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -848,7 +848,7 @@ export default function TaskList({ user }) {
                             </p>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                               <Label className="text-xs">Frequency</Label>
                               <Select value={formData.recurrence.frequency} onValueChange={(v) => setFormData({ ...formData, recurrence: { ...formData.recurrence, frequency: v, days_of_week: [] } })}>
@@ -890,7 +890,7 @@ export default function TaskList({ user }) {
                             </div>
                           )}
 
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                               <Label className="text-xs">End Date (optional)</Label>
                               <Input type="date" value={formData.recurrence.end_date} onChange={(e) => setFormData({ ...formData, recurrence: { ...formData.recurrence, end_date: e.target.value } })}
@@ -962,7 +962,7 @@ export default function TaskList({ user }) {
                 </div>
               )}
 
-              {/* RESTORED: Notification Override Section */}
+              {/* Notification Override Section */}
               {canEditNotif && (
                 <div className="border-t pt-4 mt-4">
                   <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg cursor-pointer hover:bg-secondary/70 transition-colors"
@@ -1068,8 +1068,9 @@ export default function TaskList({ user }) {
 
       {/* Filter Toolbar */}
       <div className="space-y-3">
+        {/* UX UPGRADE: Fluid wrapping and flex logic for mobile spacing */}
         <div className="flex gap-2 flex-wrap items-center">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <div className="relative w-full sm:flex-1 sm:min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search tasks…" value={searchInput}
               onChange={e => handleSearchInputChange(e.target.value)}
@@ -1089,7 +1090,7 @@ export default function TaskList({ user }) {
             onClick={() => { setParentRecurringOnly(!parentRecurringOnly); setPagination(prev => ({ ...prev, page: 1 })); }}>
             <Repeat className="h-3.5 w-3.5 mr-1.5" />Recurring
           </Button>
-          <div className="flex-1" />
+          <div className="hidden sm:block flex-1" />
           <Button variant={showAdvancedFilters ? 'secondary' : 'outline'} size="sm" className="h-9 relative"
             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}>
             <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />Filters
@@ -1100,7 +1101,7 @@ export default function TaskList({ user }) {
             )}
           </Button>
           <Select value={sortOption} onValueChange={v => { setSortOption(v); setPagination(prev => ({ ...prev, page: 1 })); }}>
-            <SelectTrigger className="w-[170px] h-9 text-xs">
+            <SelectTrigger className="w-full sm:w-[170px] h-9 text-xs">
               <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
               <SelectValue placeholder="Sort by…" />
             </SelectTrigger>
@@ -1116,8 +1117,8 @@ export default function TaskList({ user }) {
           </Select>
         </div>
 
-        {/* Status tabs */}
-        <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-xl border border-border/50 w-fit">
+        {/* Status tabs - UX UPGRADE: Swipeable on mobile */}
+        <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-xl border border-border/50 w-full sm:w-fit overflow-x-auto custom-scrollbar whitespace-nowrap">
           {STATUS_TABS.map(tab => (
             <button key={tab.value}
               onClick={() => { handleFilterChange(tab.value); setSelectedStatuses([]); }}
@@ -1160,7 +1161,8 @@ export default function TaskList({ user }) {
                   <div>
                     <Label className="mb-2 block text-xs uppercase tracking-wider text-muted-foreground">Priority</Label>
                     <div className="space-y-2">
-                      {['critical', 'high', 'medium', 'low'].map(p => (
+                      {/* UX UPGRADE: Removed 'critical' to match calendar */}
+                      {['high', 'medium', 'low'].map(p => (
                         <div key={p} className="flex items-center gap-2">
                           <Checkbox id={`priority-${p}`} checked={selectedPriorities.includes(p)} onCheckedChange={() => togglePriorityFilter(p)} />
                           <label htmlFor={`priority-${p}`} className="text-sm cursor-pointer flex items-center gap-1.5">
@@ -1184,7 +1186,6 @@ export default function TaskList({ user }) {
                     </div>
                   </div>
 
-                  {/* RESTORED: Both Due Date and Created Date filtering panels side-by-side */}
                   <div>
                     <Label className="mb-2 block text-xs uppercase tracking-wider text-muted-foreground">Due Date Range</Label>
                     <div className="space-y-2">
@@ -1373,30 +1374,32 @@ export default function TaskList({ user }) {
                 <h4 className="font-medium text-sm">{editingRecurrenceTask.title}</h4>
                 <p className="text-xs text-orange-600 mt-1">Changes affect future instances only.</p>
               </div>
-              <div className="space-y-2">
-                <Label>Frequency</Label>
-                <Select value={recurrenceEditForm.frequency} onValueChange={v => setRecurrenceEditForm(f => ({ ...f, frequency: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Every</Label>
-                <div className="flex items-center gap-2">
-                  <Input type="number" min="1" value={recurrenceEditForm.interval}
-                    onChange={e => { const v = parseInt(e.target.value) || 0; setRecurrenceEditForm(f => ({ ...f, interval: v })); if (v >= 1) setRecurrenceFormErrors(e => ({ ...e, interval: null })); }}
-                    className={`w-24 ${recurrenceFormErrors.interval ? 'border-red-500' : ''}`} />
-                  <span className="text-muted-foreground text-sm">
-                    {recurrenceEditForm.frequency === 'daily' ? 'day(s)' : recurrenceEditForm.frequency === 'weekly' ? 'week(s)' : 'month(s)'}
-                  </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Frequency</Label>
+                  <Select value={recurrenceEditForm.frequency} onValueChange={v => setRecurrenceEditForm(f => ({ ...f, frequency: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                {recurrenceFormErrors.interval && <p className="text-xs text-red-500">{recurrenceFormErrors.interval}</p>}
+                <div className="space-y-2">
+                  <Label>Every</Label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min="1" value={recurrenceEditForm.interval}
+                      onChange={e => { const v = parseInt(e.target.value) || 0; setRecurrenceEditForm(f => ({ ...f, interval: v })); if (v >= 1) setRecurrenceFormErrors(e => ({ ...e, interval: null })); }}
+                      className={`w-24 ${recurrenceFormErrors.interval ? 'border-red-500' : ''}`} />
+                    <span className="text-muted-foreground text-sm">
+                      {recurrenceEditForm.frequency === 'daily' ? 'day(s)' : recurrenceEditForm.frequency === 'weekly' ? 'week(s)' : 'month(s)'}
+                    </span>
+                  </div>
+                  {recurrenceFormErrors.interval && <p className="text-xs text-red-500">{recurrenceFormErrors.interval}</p>}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>End Date (optional)</Label>
                   <Input type="date" value={recurrenceEditForm.end_date} onChange={e => setRecurrenceEditForm(f => ({ ...f, end_date: e.target.value }))}
