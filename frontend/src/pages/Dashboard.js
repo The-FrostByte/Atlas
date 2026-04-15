@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, ComposedChart, Line
@@ -38,8 +39,6 @@ const SCOPE_CONFIG = {
   member: { label: 'Your Tasks', icon: UserCircle, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-500/10 border-slate-200 dark:border-slate-500/20' },
 };
 
-// FIX 1 — Added icon components to each entry; previously mode.icon was
-//          undefined and rendered an empty <span> at every screen size.
 const VIEW_MODES = [
   {
     key: 'all',
@@ -70,9 +69,9 @@ const VIEW_MODES = [
 // ─── Preset Filters ───────────────────────────────────────────────────────────
 const PRESET_FILTERS = [
   { key: 'all', label: 'All Time' },
-  { key: '7d', label: '7d' },       // FIX 2 — Shortened labels so the filter
-  { key: '14d', label: '14d' },      //          row never wraps onto a second line
-  { key: '30d', label: '30d' },      //          on xs/sm screens.
+  { key: '7d', label: '7d' },
+  { key: '14d', label: '14d' },
+  { key: '30d', label: '30d' },
   { key: 'custom', label: 'Custom Range' },
 ];
 
@@ -130,12 +129,6 @@ const SkeletonChart = ({ height = 320 }) => (
   </Card>
 );
 
-// ─── FIX 3 — Custom Rotated Axis Tick ─────────────────────────────────────────
-// This is the primary fix for the overlapping chart labels issue. Instead of
-// letting Recharts render horizontal labels that collide at narrow widths, we
-// rotate every label -38° and truncate long names with an ellipsis so they
-// never cross one another regardless of how narrow the container becomes.
-// The XAxis must set height={55} to give rotated text enough vertical room.
 const RotatedAxisTick = ({ x, y, payload, maxChars = 9 }) => {
   const raw = String(payload?.value ?? '');
   const label = raw.length > maxChars ? `${raw.slice(0, maxChars - 1)}…` : raw;
@@ -179,11 +172,12 @@ function MetaCard({ label, value, icon: Icon, iconBg, iconColor, onClick, subtit
 }
 
 // ─── Status Card ──────────────────────────────────────────────────────────────
-function StatusCard({ label, value, total, icon: Icon, iconBg, iconColor, accentColor, subtitle }) {
+function StatusCard({ label, value, total, icon: Icon, iconBg, iconColor, accentColor, subtitle, onClick }) {
   const animated = useAnimatedCount(value);
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <Card className="relative p-5 border-border/50 overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+    <Card onClick={onClick}
+      className="relative p-5 border-border/50 overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
       <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ backgroundColor: accentColor }} />
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
@@ -293,9 +287,6 @@ function DateFilterBar({ activeFilter, onFilterChange, customRange, onCustomRang
 
   return (
     <div className="flex flex-col items-end gap-2">
-      {/* FIX 4 — Preset buttons use shortened labels (7d/14d/30d) so this row
-                 fits at xs without wrapping. The custom-range button is kept
-                 separate and always visible. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-0.5 p-1 bg-muted/40 rounded-lg border border-border/50">
           {PRESET_FILTERS.filter(f => f.key !== 'custom').map(filter => (
@@ -303,8 +294,8 @@ function DateFilterBar({ activeFilter, onFilterChange, customRange, onCustomRang
               key={filter.key}
               onClick={() => handlePresetClick(filter.key)}
               className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${activeFilter === filter.key
-                  ? 'bg-background text-foreground shadow-sm border border-border/60'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                ? 'bg-background text-foreground shadow-sm border border-border/60'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                 }`}
             >
               {filter.label}
@@ -316,8 +307,8 @@ function DateFilterBar({ activeFilter, onFilterChange, customRange, onCustomRang
           <button
             onClick={() => handlePresetClick('custom')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 ${activeFilter === 'custom'
-                ? 'bg-background text-foreground border-primary/30 shadow-sm'
-                : 'text-muted-foreground border-border/50 hover:text-foreground hover:border-border hover:bg-muted/40'
+              ? 'bg-background text-foreground border-primary/30 shadow-sm'
+              : 'text-muted-foreground border-border/50 hover:text-foreground hover:border-border hover:bg-muted/40'
               }`}
           >
             <Calendar className="h-3.5 w-3.5" />
@@ -380,7 +371,6 @@ function DateFilterBar({ activeFilter, onFilterChange, customRange, onCustomRang
         </div>
       </div>
 
-      {/* Active filter badge */}
       <div className="h-6 self-end">
         <AnimatePresence>
           {activeFilter !== 'all' && (
@@ -550,11 +540,8 @@ export default function Dashboard({ user }) {
     employeeData: [],
   });
 
-  useEffect(() => {
-    loadStats(activeDateRange.start_date, activeDateRange.end_date);
-  }, [activeDateRange, viewMode]);
-
-  const loadStats = async (start_date, end_date) => {
+  // We use useCallback to memoize the function definition so it doesn't trigger unnecessary re-renders
+  const loadStats = useCallback(async (start_date, end_date, signal) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -564,8 +551,8 @@ export default function Dashboard({ user }) {
       const qs = params.toString() ? `?${params.toString()}` : '';
 
       const [statsRes, employeeRes] = await Promise.all([
-        api.get(`/dashboard/stats${qs}`),
-        api.get(`/dashboard/employee-load${qs}`),
+        api.get(`/dashboard/stats${qs}`, { signal }),
+        api.get(`/dashboard/employee-load${qs}`, { signal }),
       ]);
 
       const empData = (employeeRes.data || []).map(emp => {
@@ -593,11 +580,20 @@ export default function Dashboard({ user }) {
         employeeData: empData,
       });
     } catch (error) {
-      console.error('Dashboard error:', error);
+      if (!axios.isCancel(error)) {
+        console.error('Dashboard error:', error);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [viewMode]); // loadStats now knows it depends on viewMode
+
+  // The effect now safely tracks both the date range and the memoized function
+  useEffect(() => {
+    const controller = new AbortController();
+    loadStats(activeDateRange.start_date, activeDateRange.end_date, controller.signal);
+    return () => controller.abort();
+  }, [activeDateRange, loadStats]);
 
   const handleFilterChange = (key) => {
     setActiveFilter(key);
@@ -606,26 +602,43 @@ export default function Dashboard({ user }) {
       setCustomRange({ start: '', end: '' });
     }
   };
+
   const handleCustomApply = (start_date, end_date) => setActiveDateRange({ start_date, end_date });
 
-  const getStatusCount = (key) =>
-    stats.statusData.find(s => s.name.toLowerCase().replace(' ', '_') === key)?.value || 0;
+  // 1. Wrap the helper in useCallback so it doesn't get recreated every render
+  const getStatusCount = useCallback((key) => {
+    return stats.statusData.find(s => s.name.toLowerCase().replace(' ', '_') === key)?.value || 0;
+  }, [stats.statusData]);
 
-  const completedCount = getStatusCount('completed');
-  const inProgressCount = getStatusCount('in_progress');
-  const pendingCount = getStatusCount('pending');
+  // 2. Pass getStatusCount into the dependency arrays
+  const completedCount = useMemo(() => getStatusCount('completed'), [getStatusCount]);
+  const inProgressCount = useMemo(() => getStatusCount('in_progress'), [getStatusCount]);
+  const pendingCount = useMemo(() => getStatusCount('pending'), [getStatusCount]);
   const overdueCount = stats.summary.overdue_tasks || 0;
   const totalTasks = stats.summary.total_tasks || 0;
   const totalUsers = stats.summary.total_users || 0;
 
-  const activeStatuses = Object.keys(COLORS).filter(status =>
-    stats.statusData.some(e => e.name.toLowerCase().replace(' ', '_') === status && e.value > 0)
-  );
-  const customLegendPayload = activeStatuses.map(status => ({
-    value: status.replace('_', ' '), type: 'circle', id: status, color: COLORS[status],
-  }));
+  const activeStatuses = useMemo(() => {
+    return Object.keys(COLORS).filter(status =>
+      stats.statusData.some(e => e.name.toLowerCase().replace(' ', '_') === status && e.value > 0)
+    );
+  }, [stats.statusData]);
 
-  const overdueEmployees = stats.employeeData.filter(e => e.has_most_overdue && e.overdue > 0);
+  const customLegendPayload = useMemo(() => {
+    return activeStatuses.map(status => ({
+      value: status.replace('_', ' '), type: 'circle', id: status, color: COLORS[status],
+    }));
+  }, [activeStatuses]);
+
+  const overdueEmployees = useMemo(() => {
+    return stats.employeeData.filter(e => e.has_most_overdue && e.overdue > 0);
+  }, [stats.employeeData]);
+
+  const filteredEmployees = useMemo(() => {
+    return stats.employeeData.filter(u => u.name.toLowerCase().includes(employeeSearch.toLowerCase()));
+  }, [stats.employeeData, employeeSearch]);
+
+
   const hasChartData = stats.statusData.some(s => s.value > 0);
   const hasDeptData = stats.departmentData.some(d => d.completed + d.in_progress + d.pending + d.overdue > 0);
   const hasEmpData = stats.employeeData.length > 0;
@@ -660,19 +673,7 @@ export default function Dashboard({ user }) {
 
       <motion.div className="space-y-8 max-w-7xl mx-auto" variants={containerVariants} initial="hidden" animate="visible">
 
-        {/* ── HEADER ─────────────────────────────────────────────────────────── */}
-        {/*
-          FIX 5 — Restructured header into two clearly-separated rows at all
-          breakpoints instead of a single flex-row that collapses badly at md.
-
-          Row A (always full-width): title + RBAC scope badge.
-          Row B (full-width below lg, right-aligned at lg+): view-mode selector
-          + date filter bar.  This prevents the right column from towering over
-          the title at the awkward 768–1023 px range.
-        */}
         <motion.div variants={itemVariants} className="flex flex-col gap-3">
-
-          {/* Row A — Title + RBAC scope */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h1 className="text-3xl font-bold tracking-tight text-foreground">
               {viewMode === 'completed' ? 'Completed Tasks' : viewMode === 'due_date' ? 'Tasks by Due Date' : 'Operations Dashboard'}
@@ -688,14 +689,7 @@ export default function Dashboard({ user }) {
             </div>
           </div>
 
-          {/* Row B — Controls (full-width, wraps naturally) */}
           <div className="flex flex-wrap items-start justify-between gap-3 pt-1">
-
-            {/* View mode selector
-                FIX 6 — Replaced the dead {mode.icon} empty span with actual icon
-                components from VIEW_MODES config. Added sm:hidden/sm:inline for
-                responsive label visibility so xs screens show icon-only buttons.
-                flex-wrap prevents the row overflowing on very narrow viewports. */}
             <div className="flex flex-wrap items-center gap-1 p-1 bg-muted/40 rounded-xl border border-border/50">
               {VIEW_MODES.map(mode => {
                 const ModeIcon = mode.icon;
@@ -704,12 +698,11 @@ export default function Dashboard({ user }) {
                     key={mode.key}
                     onClick={() => setViewMode(mode.key)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${viewMode === mode.key
-                        ? mode.activeClass + ' shadow-sm'
-                        : mode.idleClass
+                      ? mode.activeClass + ' shadow-sm'
+                      : mode.idleClass
                       }`}
                     title={mode.label}
                   >
-                    {/* Icon always visible; label hidden on xs to save space */}
                     <ModeIcon className="h-3.5 w-3.5 shrink-0" />
                     <span className="hidden xs:inline sm:inline">{mode.label}</span>
                   </button>
@@ -717,7 +710,6 @@ export default function Dashboard({ user }) {
               })}
             </div>
 
-            {/* Date range section */}
             <div className="flex flex-col items-end gap-1 min-w-0">
               <DateFilterBar
                 activeFilter={activeFilter}
@@ -736,7 +728,6 @@ export default function Dashboard({ user }) {
           </div>
         </motion.div>
 
-        {/* ── ROW 1 — Meta cards ───────────────────────────────────────────── */}
         <motion.div variants={itemVariants} className="grid sm:grid-cols-2 gap-4">
           <MetaCard
             label="Total Tasks" value={totalTasks} icon={ClipboardList}
@@ -752,15 +743,13 @@ export default function Dashboard({ user }) {
           />
         </motion.div>
 
-        {/* ── ROW 2 — Status cards ─────────────────────────────────────────── */}
         <motion.div variants={itemVariants} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatusCard label="Completed" value={completedCount} total={totalTasks} icon={CheckCircle2} iconBg="bg-emerald-500/10" iconColor="text-emerald-500" accentColor={COLORS.completed} subtitle="Finished on time" />
-          <StatusCard label="In Progress" value={inProgressCount} total={totalTasks} icon={Loader2} iconBg="bg-blue-500/10" iconColor="text-blue-500" accentColor={COLORS.in_progress} subtitle="Currently active" />
-          <StatusCard label="Pending" value={pendingCount} total={totalTasks} icon={Clock} iconBg="bg-slate-500/10" iconColor="text-slate-400" accentColor={COLORS.pending} subtitle="Awaiting action" />
-          <StatusCard label="Overdue" value={overdueCount} total={totalTasks} icon={AlertCircle} iconBg="bg-red-500/10" iconColor="text-red-500" accentColor={COLORS.overdue} subtitle="Needs immediate attention" />
+          <StatusCard label="Completed" value={completedCount} total={totalTasks} icon={CheckCircle2} iconBg="bg-emerald-500/10" iconColor="text-emerald-500" accentColor={COLORS.completed} subtitle="Finished on time" onClick={() => navigate('/tasks?status=completed')} />
+          <StatusCard label="In Progress" value={inProgressCount} total={totalTasks} icon={Loader2} iconBg="bg-blue-500/10" iconColor="text-blue-500" accentColor={COLORS.in_progress} subtitle="Currently active" onClick={() => navigate('/tasks?status=in_progress')} />
+          <StatusCard label="Pending" value={pendingCount} total={totalTasks} icon={Clock} iconBg="bg-slate-500/10" iconColor="text-slate-400" accentColor={COLORS.pending} subtitle="Awaiting action" onClick={() => navigate('/tasks?status=pending')} />
+          <StatusCard label="Overdue" value={overdueCount} total={totalTasks} icon={AlertCircle} iconBg="bg-red-500/10" iconColor="text-red-500" accentColor={COLORS.overdue} subtitle="Needs immediate attention" onClick={() => navigate('/tasks?status=delayed')} />
         </motion.div>
 
-        {/* ── Pipeline bar ─────────────────────────────────────────────────── */}
         {totalTasks > 0 && (
           <motion.div variants={itemVariants}>
             <Card className="px-6 py-5 border-border/50">
@@ -773,15 +762,12 @@ export default function Dashboard({ user }) {
           </motion.div>
         )}
 
-        {/* ── Charts ───────────────────────────────────────────────────────── */}
         <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* Pie — Status Distribution */}
           <Card className="p-4 sm:p-6 flex flex-col border-border/50 lg:col-span-1 overflow-hidden">
             <h3 className="font-semibold text-lg text-foreground mb-4">Status Distribution</h3>
             {hasChartData ? (
               <div className="h-[260px] sm:h-[320px] w-full [&_*]:outline-none">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                   <PieChart>
                     <Pie
                       data={stats.statusData}
@@ -790,16 +776,16 @@ export default function Dashboard({ user }) {
                       innerRadius={55} outerRadius={75}
                       paddingAngle={3}
                       stroke="none"
+                      cursor="pointer"
+                      onClick={(data) => {
+                        const statusMap = { 'Completed': 'completed', 'In Progress': 'in_progress', 'Pending': 'pending', 'Overdue': 'delayed' };
+                        const statusParam = statusMap[data.name];
+                        if (statusParam) navigate(`/tasks?status=${statusParam}`);
+                      }}
                     >
                       {stats.statusData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                     </Pie>
                     <Tooltip content={<CustomTooltip type="pie" pieData={stats.statusData} />} />
-                    {/*
-                      FIX 7 — iconSize reduced from default 14 to 8 so the legend
-                      dots are proportional to the 11px label text. overflow:visible
-                      prevents clipping at card edges on xs.  paddingTop halved to
-                      10px since cy is now 45% which frees up more bottom space.
-                    */}
                     <Legend
                       payload={customLegendPayload}
                       verticalAlign="bottom"
@@ -817,21 +803,12 @@ export default function Dashboard({ user }) {
             )}
           </Card>
 
-          {/* Bar — Department Load */}
           <Card className="p-4 sm:p-6 flex flex-col border-border/50 lg:col-span-2 overflow-hidden">
             <h3 className="font-semibold text-lg text-foreground mb-4">Department Load</h3>
             {hasDeptData ? (
-              /*
-                FIX 8 — Wrapped chart in overflow-x-auto + min-w so that on xs
-                the bars never get so narrow they become invisible.  The
-                RotatedAxisTick component on XAxis is the core fix: -38° rotation
-                + 9-char truncation means labels never overlap regardless of how
-                many departments are loaded.  height={55} on XAxis reserves the
-                vertical space the rotated text needs.
-              */
               <div className="w-full overflow-x-auto">
                 <div className="min-w-[380px] h-[260px] sm:h-[320px] [&_*]:outline-none">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                     <BarChart
                       data={stats.departmentData}
                       margin={{ top: 20, right: 5, left: -5, bottom: 0 }}
@@ -861,10 +838,10 @@ export default function Dashboard({ user }) {
                           <span className="text-xs font-medium text-muted-foreground capitalize mx-1">{v}</span>
                         )}
                       />
-                      <Bar dataKey="completed" name="Completed" stackId="a" fill={COLORS.completed} />
-                      <Bar dataKey="in_progress" name="In Progress" stackId="a" fill={COLORS.in_progress} />
-                      <Bar dataKey="pending" name="Pending" stackId="a" fill={COLORS.pending} />
-                      <Bar dataKey="overdue" name="Overdue" stackId="a" fill={COLORS.overdue} radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="completed" name="Completed" stackId="a" fill={COLORS.completed} cursor="pointer" onClick={(data) => navigate(`/tasks?status=completed&department=${encodeURIComponent(data.name)}`)} />
+                      <Bar dataKey="in_progress" name="In Progress" stackId="a" fill={COLORS.in_progress} cursor="pointer" onClick={(data) => navigate(`/tasks?status=in_progress&department=${encodeURIComponent(data.name)}`)} />
+                      <Bar dataKey="pending" name="Pending" stackId="a" fill={COLORS.pending} cursor="pointer" onClick={(data) => navigate(`/tasks?status=pending&department=${encodeURIComponent(data.name)}`)} />
+                      <Bar dataKey="overdue" name="Overdue" stackId="a" fill={COLORS.overdue} radius={[3, 3, 0, 0]} cursor="pointer" onClick={(data) => navigate(`/tasks?status=delayed&department=${encodeURIComponent(data.name)}`)} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -875,7 +852,6 @@ export default function Dashboard({ user }) {
           </Card>
         </motion.div>
 
-        {/* ── Individual Workload ──────────────────────────────────────────── */}
         <motion.div variants={itemVariants}>
           <Card className="p-4 sm:p-6 border-border/50 flex flex-col overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3">
@@ -895,16 +871,9 @@ export default function Dashboard({ user }) {
 
             {hasEmpData ? (
               <>
-                {/*
-                  FIX 9 — Employee ComposedChart gets the same RotatedAxisTick
-                  treatment with maxChars=8 (first names tend to be shorter so
-                  fewer characters are needed before truncation).  min-w bumped
-                  to 460px so each bar column has breathing room before scroll
-                  kicks in.
-                */}
                 <div className="w-full overflow-x-auto">
                   <div className="min-w-[460px] h-[300px] sm:h-[350px] [&_*]:outline-none">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                       <ComposedChart
                         data={stats.employeeData}
                         margin={{ top: 30, right: 10, left: -5, bottom: 0 }}
@@ -926,10 +895,10 @@ export default function Dashboard({ user }) {
                           width={30}
                         />
                         <Tooltip cursor={false} content={<CustomTooltip type="employee" />} />
-                        <Bar dataKey="completed" stackId="a" fill={COLORS.completed} />
-                        <Bar dataKey="in_progress" stackId="a" fill={COLORS.in_progress} />
-                        <Bar dataKey="pending" stackId="a" fill={COLORS.pending} />
-                        <Bar dataKey="overdue" stackId="a" fill={COLORS.overdue} radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="completed" stackId="a" fill={COLORS.completed} cursor="pointer" onClick={(data) => navigate(`/tasks?status=completed&assigned_to=${data.id}`)} />
+                        <Bar dataKey="in_progress" stackId="a" fill={COLORS.in_progress} cursor="pointer" onClick={(data) => navigate(`/tasks?status=in_progress&assigned_to=${data.id}`)} />
+                        <Bar dataKey="pending" stackId="a" fill={COLORS.pending} cursor="pointer" onClick={(data) => navigate(`/tasks?status=pending&assigned_to=${data.id}`)} />
+                        <Bar dataKey="overdue" stackId="a" fill={COLORS.overdue} radius={[3, 3, 0, 0]} cursor="pointer" onClick={(data) => navigate(`/tasks?status=delayed&assigned_to=${data.id}`)} />
                         <Line
                           type="monotone" dataKey="chartTotal"
                           stroke="transparent" strokeWidth={0}
@@ -941,7 +910,6 @@ export default function Dashboard({ user }) {
                   </div>
                 </div>
 
-                {/* Performance Highlights */}
                 <div className="mt-6 sm:mt-8 border-t border-border/50 pt-4 sm:pt-6">
                   <h4 className="text-sm font-semibold text-foreground mb-3 sm:mb-4">Performance Highlights</h4>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -966,9 +934,11 @@ export default function Dashboard({ user }) {
                         }
                       }
                       return (
-                        <div key={emp.name} className={`p-3 sm:p-4 rounded-xl border transition-colors ${cardStyle}`}>
-                          {/* FIX 10 — Added title attribute so full name is accessible
-                               on hover even when truncated. */}
+                        <div
+                          key={emp.name}
+                          onClick={() => navigate(`/tasks?assigned_to=${emp.id}`)}
+                          className={`p-3 sm:p-4 rounded-xl border transition-colors cursor-pointer hover:shadow-md ${cardStyle}`}
+                        >
                           <p className="text-xs sm:text-sm font-bold text-foreground truncate" title={emp.name}>{emp.name}</p>
                           <p className="text-[10px] sm:text-xs text-muted-foreground truncate mt-0.5" title={emp.department}>{emp.department}</p>
                           <div className="mt-2 sm:mt-3 flex items-center justify-between">
@@ -994,7 +964,6 @@ export default function Dashboard({ user }) {
           </Card>
         </motion.div>
 
-        {/* ── Execution Table (hidden for members) ─────────────────────────── */}
         {user?.role !== 'member' && (
           <motion.div variants={itemVariants}>
             <Card className="border-border/50 overflow-hidden">
@@ -1018,13 +987,6 @@ export default function Dashboard({ user }) {
                 <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="bg-muted/30 text-muted-foreground border-b border-border/50">
                     <tr>
-                      {/*
-                        FIX 11 — Table header cells use consistent px-4 sm:px-6
-                        spacing.  The "Team Member" column gets min-w-[140px] to
-                        prevent name+badge from squishing at xs, while status
-                        columns use min-w-[100px] (down from 120px) since the
-                        pill badges are compact enough.
-                      */}
                       <th className="px-4 sm:px-6 py-3 sm:py-4 font-medium min-w-[140px]">Team Member</th>
                       <th className="px-4 sm:px-6 py-3 sm:py-4 font-medium text-center min-w-[100px]">Completed</th>
                       <th className="px-4 sm:px-6 py-3 sm:py-4 font-medium text-center min-w-[100px]">In Progress</th>
@@ -1033,38 +995,34 @@ export default function Dashboard({ user }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
-                    {stats.employeeData
-                      .filter(u => u.name.toLowerCase().includes(employeeSearch.toLowerCase()))
-                      .map(u => (
-                        <tr
-                          key={u.name}
-                          className={`transition-colors ${u.overdue > 0
-                              ? 'bg-red-50/40 dark:bg-red-500/5 hover:bg-red-50/70 dark:hover:bg-red-500/10'
-                              : 'hover:bg-muted/20'
-                            }`}
-                        >
-                          <td className="px-4 sm:px-6 py-3 sm:py-4">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-foreground">{u.name}</span>
-                              {u.overdue > 0 && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400 shrink-0">
-                                  <AlertCircle className="h-2.5 w-2.5" />Overdue
-                                </span>
-                              )}
-                            </div>
-                            {/* FIX 12 — Department shown with max-w + truncate so very
-                                 long dept names don't stretch the first column. */}
-                            <p className="text-xs text-muted-foreground mt-0.5 max-w-[160px] truncate" title={u.department}>
-                              {u.department}
-                            </p>
-                          </td>
-                          <td className="px-4 sm:px-6 py-3.5"><StatCell value={u.completed} colorClass={PILL_COLORS.completed} /></td>
-                          <td className="px-4 sm:px-6 py-3.5"><StatCell value={u.in_progress} colorClass={PILL_COLORS.in_progress} /></td>
-                          <td className="px-4 sm:px-6 py-3.5"><StatCell value={u.overdue} colorClass={PILL_COLORS.overdue} /></td>
-                          <td className="px-4 sm:px-6 py-3.5"><StatCell value={u.pending} colorClass={PILL_COLORS.pending} /></td>
-                        </tr>
-                      ))}
-                    {stats.employeeData.filter(u => u.name.toLowerCase().includes(employeeSearch.toLowerCase())).length === 0 && (
+                    {filteredEmployees.map(u => (
+                      <tr
+                        key={u.name}
+                        className={`transition-colors ${u.overdue > 0
+                          ? 'bg-red-50/40 dark:bg-red-500/5 hover:bg-red-50/70 dark:hover:bg-red-500/10'
+                          : 'hover:bg-muted/20'
+                          }`}
+                      >
+                        <td className="px-4 sm:px-6 py-3 sm:py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground">{u.name}</span>
+                            {u.overdue > 0 && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400 shrink-0">
+                                <AlertCircle className="h-2.5 w-2.5" />Overdue
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5 max-w-[160px] truncate" title={u.department}>
+                            {u.department}
+                          </p>
+                        </td>
+                        <td className="px-4 sm:px-6 py-3.5"><StatCell value={u.completed} colorClass={PILL_COLORS.completed} /></td>
+                        <td className="px-4 sm:px-6 py-3.5"><StatCell value={u.in_progress} colorClass={PILL_COLORS.in_progress} /></td>
+                        <td className="px-4 sm:px-6 py-3.5"><StatCell value={u.overdue} colorClass={PILL_COLORS.overdue} /></td>
+                        <td className="px-4 sm:px-6 py-3.5"><StatCell value={u.pending} colorClass={PILL_COLORS.pending} /></td>
+                      </tr>
+                    ))}
+                    {filteredEmployees.length === 0 && (
                       <tr>
                         <td colSpan="5" className="px-6 py-10 text-center text-muted-foreground">
                           {employeeSearch ? 'No employees match your search.' : 'No active execution data available.'}

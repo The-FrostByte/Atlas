@@ -33,44 +33,21 @@ export const createUser = async (req, res) => {
 };
 
 // ─── updateUser ───────────────────────────────────────────────────────────────
-// Hybrid protection (route uses protect, NOT adminOnly):
-//   • Admins    — can update all fields including role and department
-//   • Non-admins — can only update their OWN profile (name, email, phone)
-//                  They CANNOT change role or department
-//                  They CANNOT update another user's profile
+// Admin only (enforced at route level).
 export const updateUser = async (req, res) => {
   try {
-    const { name, email, phone, department, role } = req.body;
-    const requesterId = req.user.id;
-    const isAdmin = req.user.role === 'admin';
+    const { name, email, phone, department, role, is_active } = req.body;
 
     const user = await User.findOne({ id: req.params.id });
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const isSelf = String(user.id) === String(requesterId);
-
-    // Non-admins can only edit themselves
-    if (!isAdmin && !isSelf) {
-      return res.status(403).json({ message: 'Forbidden: You can only edit your own profile' });
-    }
-
-    // Validate required fields
-    if (!name || (!email && !phone)) {
-      return res.status(400).json({ message: 'Name and either email or phone are required' });
-    }
-
-    // Always update safe personal fields
-    user.name = name;
-    user.email = email || user.email;
-    user.phone = phone || user.phone;
-
-    // Only admins may change role or department
-    if (isAdmin) {
-      if (department) user.department = department;
-      if (role) user.role = role;
-    }
-    // Non-admin attempting to change role/dept → silently ignore
-    // (do not error, just don't apply the change)
+    // Update fields (only admins will reach this code)
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (phone) user.phone = phone;
+    if (department) user.department = department;
+    if (role) user.role = role;
+    if (is_active !== undefined) user.is_active = is_active;
 
     await user.save();
     res.json(user);
@@ -126,6 +103,40 @@ export const searchMentions = async (req, res) => {
       ]
     }).select('id name email department').limit(5);
     res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ─── uploadProfilePicture ─────────────────────────────────────────────────────
+// Any user can upload a picture for themselves, Admins can upload for anyone.
+export const uploadProfilePicture = async (req, res) => {
+  try {
+    const targetUserId = req.params.id;
+    const isSelf = String(req.user.id) === String(targetUserId);
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({ message: 'Forbidden: You can only update your own profile picture' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file provided' });
+    }
+
+    const fileUrl = `/uploads/${req.file.filename}`;
+
+    const updatedUser = await User.findOneAndUpdate(
+      { id: targetUserId },
+      { profile_picture: fileUrl },
+      { returnDocument: 'after' }
+    ).select('-__v');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ message: 'Profile picture updated', user: updatedUser });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

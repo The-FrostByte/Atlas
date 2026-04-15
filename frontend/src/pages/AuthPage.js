@@ -7,10 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { toast } from 'sonner';
-import axios from 'axios';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { api } from '../App';
 
 export default function AuthPage({ setUser }) {
   const navigate = useNavigate();
@@ -33,7 +30,7 @@ export default function AuthPage({ setUser }) {
 
     setLoading(true);
     try {
-      const response = await axios.post(`${API}/auth/send-otp`, {
+      const response = await api.post('/auth/send-otp', {
         email: contactType === 'email' ? email : null,
         phone: contactType === 'phone' ? phone : null,
       });
@@ -68,7 +65,7 @@ export default function AuthPage({ setUser }) {
 
     setLoading(true);
     try {
-      const response = await axios.post(`${API}/auth/verify-otp`, {
+      const response = await api.post('/auth/verify-otp', {
         email: contactType === 'email' ? email : null,
         phone: contactType === 'phone' ? phone : null,
         otp,

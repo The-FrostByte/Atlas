@@ -13,21 +13,16 @@ import {
   canModifyRecurrence,
 } from '../utils/permissions.js';
 
-// ─── Helper: fetch assignee user for dept checks ──────────────────────────────
-const getAssigneeUser = async (assignedToId) => {
-  if (!assignedToId) return null;
-  return User.findOne({ id: String(assignedToId) }).lean();
-};
-
 // ─── Helper: build the correct task query for a given role ───────────────────
 const buildTaskQuery = async (role, id, department) => {
   if (role === 'admin') return {};
+
   if (role === 'manager') {
-    const deptUsers = await User.find({ department }).select('id').lean();
-    const deptUserIds = deptUsers.map(u => u.id);
+    // N+1 OPTIMIZATION: We no longer need to query the User collection here.
+    // We filter directly on the denormalized assignee_department.
     return {
       $or: [
-        { assigned_to: { $in: deptUserIds } },
+        { assignee_department: department },
         { assigned_by: id }
       ]
     };
@@ -46,6 +41,9 @@ export const createTask = async (req, res) => {
     const taskId = uuidv4();
     const now = new Date().toISOString();
 
+    // Fetch the assignee once during creation to embed their department
+    const assigneeUser = await User.findOne({ id: assigned_to }).lean();
+
     const newTask = new Task({
       id: taskId,
       title,
@@ -53,10 +51,10 @@ export const createTask = async (req, res) => {
       priority: priority || 'medium',
       status: 'pending',
       assigned_to,
+      assignee_department: assigneeUser?.department || 'General', // Embedded
       assigned_by: req.user.id,
       due_date,
       is_recurring: is_recurring || false,
-
       created_at: now,
       updated_at: now
     });
@@ -119,20 +117,17 @@ export const getTasks = async (req, res) => {
 
     // ── 1. RBAC visibility scope ─────────────────────────────────────────────
     if (req.user.role === 'admin') {
-      // Sees all — no extra filter
+      // Sees all
     } else if (req.user.role === 'manager') {
-      // Visibility: assigned to manager | assigned to dept users | created by manager
-      const deptUsers = await User.find({ department: req.user.department }).select('id').lean();
-      const deptUserIds = deptUsers.map(u => u.id);
+      // N+1 Optimized Check
       query.$and.push({
         $or: [
           { assigned_to: req.user.id },
-          { assigned_to: { $in: deptUserIds } },
+          { assignee_department: req.user.department },
           { assigned_by: req.user.id }
         ]
       });
     } else {
-      // Member: assigned to | created by
       query.$and.push({
         $or: [{ assigned_to: req.user.id }, { assigned_by: req.user.id }]
       });
@@ -238,8 +233,9 @@ export const getTaskById = async (req, res) => {
     const task = await Task.findOne({ id: req.params.task_id }).lean();
     if (!task) return res.status(404).json({ message: 'Task not found' });
 
-    const assignee = await getAssigneeUser(task.assigned_to);
-    if (!canViewTask(req.user, task, assignee)) {
+    // Mock assignee using embedded data for the permission checker
+    const mockAssignee = { id: task.assigned_to, department: task.assignee_department };
+    if (!canViewTask(req.user, task, mockAssignee)) {
       return res.status(403).json({ message: 'Forbidden: You do not have access to this task' });
     }
 
@@ -255,26 +251,32 @@ export const updateTask = async (req, res) => {
     const task = await Task.findOne({ id: req.params.task_id }).lean();
     if (!task) return res.status(404).json({ message: 'Task not found' });
 
-    const assignee = await getAssigneeUser(task.assigned_to);
+    const mockAssignee = { id: task.assigned_to, department: task.assignee_department };
 
-    // Status-only updates use canChangeTaskStatus; full edits use canEditTask
-    const isStatusOnlyUpdate =
-      Object.keys(req.body).length === 1 && req.body.status !== undefined;
+    const isStatusOnlyUpdate = Object.keys(req.body).length === 1 && req.body.status !== undefined;
 
     if (isStatusOnlyUpdate) {
-      if (!canChangeTaskStatus(req.user, task, assignee)) {
+      if (!canChangeTaskStatus(req.user, task, mockAssignee)) {
         return res.status(403).json({ message: 'Forbidden: You cannot change the status of this task' });
       }
     } else {
-      if (!canEditTask(req.user, task, assignee)) {
+      if (!canEditTask(req.user, task, mockAssignee)) {
         return res.status(403).json({ message: 'Forbidden: You cannot edit this task' });
       }
     }
 
+    const updatePayload = { ...req.body, updated_at: new Date().toISOString() };
+
+    // If reassigned, update the embedded department
+    if (req.body.assigned_to && req.body.assigned_to !== task.assigned_to) {
+      const newAssigneeUser = await User.findOne({ id: req.body.assigned_to }).lean();
+      updatePayload.assignee_department = newAssigneeUser?.department || 'General';
+    }
+
     const updated = await Task.findOneAndUpdate(
       { id: req.params.task_id },
-      { ...req.body, updated_at: new Date().toISOString() },
-      { new: true }
+      updatePayload,
+      { returnDocument: 'after' }
     );
 
     res.json(updated);
@@ -284,7 +286,6 @@ export const updateTask = async (req, res) => {
 };
 
 // ─── deleteTask ───────────────────────────────────────────────────────────────
-// Admin only — enforced at route level (adminOnly middleware) AND here as a safety net.
 export const deleteTask = async (req, res) => {
   try {
     if (!canDeleteTask(req.user)) {
@@ -334,7 +335,7 @@ export const completeTask = async (req, res) => {
           attachments: attachment_ids
         }
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (completed.is_recurring && completed.is_recurring_active) {
@@ -362,7 +363,7 @@ export const stopRecurringTask = async (req, res) => {
     const updated = await Task.findOneAndUpdate(
       { id: req.params.task_id },
       { 'recurrence.enabled': false, updated_at: new Date().toISOString() },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     res.json({ message: 'Recurring schedule stopped successfully', task: updated });
@@ -386,7 +387,7 @@ export const resumeRecurringTask = async (req, res) => {
     const updated = await Task.findOneAndUpdate(
       { id: req.params.task_id },
       { is_recurring_active: true, updated_at: new Date().toISOString() },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     res.json({ message: 'Recurring schedule resumed successfully', task: updated });
@@ -423,7 +424,7 @@ export const toggleRecurrence = async (req, res) => {
     const updated = await Task.findOneAndUpdate(
       { id: req.params.task_id },
       { is_recurring_active: !task.is_recurring_active },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     res.json({ is_active: updated.is_recurring_active });
@@ -445,7 +446,6 @@ export const deleteRecurringTask = async (req, res) => {
   }
 };
 
-// ─── getTaskById (public alias) ───────────────────────────────────────────────
 export { getTaskById as getTask };
 
 // ─── getTaskAttachments ───────────────────────────────────────────────────────
@@ -454,8 +454,8 @@ export const getTaskAttachments = async (req, res) => {
     const task = await Task.findOne({ id: req.params.task_id }).lean();
     if (!task) return res.status(404).json({ message: 'Task not found' });
 
-    const assignee = await getAssigneeUser(task.assigned_to);
-    if (!canViewTask(req.user, task, assignee)) {
+    const mockAssignee = { id: task.assigned_to, department: task.assignee_department };
+    if (!canViewTask(req.user, task, mockAssignee)) {
       return res.status(403).json({ message: 'Forbidden: No access to this task' });
     }
 
@@ -474,17 +474,15 @@ export const uploadTaskAttachments = async (req, res) => {
     const task = await Task.findOne({ id: taskId }).lean();
     if (!task) return res.status(404).json({ message: 'Task not found' });
 
-    const assignee = await getAssigneeUser(task.assigned_to);
+    const mockAssignee = { id: task.assigned_to, department: task.assignee_department };
 
-    // Completed tasks: admin only
     if (task.status === 'completed' && req.user.role !== 'admin') {
       return res.status(403).json({
         message: 'Forbidden: Only admins can upload attachments to completed tasks'
       });
     }
 
-    // Active tasks: any viewer
-    if (!canViewTask(req.user, task, assignee)) {
+    if (!canViewTask(req.user, task, mockAssignee)) {
       return res.status(403).json({ message: 'Forbidden: No access to this task' });
     }
 
@@ -532,15 +530,10 @@ export const getTaskSchedule = async (req, res) => {
 
     let query = await buildTaskQuery(role, id, department);
 
-    // Apply the boundaries that the frontend pagination passes
     if (start_date && end_date) {
       query.due_date = { $gte: start_date, $lte: end_date };
     }
 
-    // FIX: REMOVED status: { $ne: 'completed' } to allow completed tasks to show in schedule
-
-    // We lean() and send an array directly to the frontend because the DailySchedule.js
-    // adapter knows how to group these by timezone correctly.
     const tasks = await Task.find(query).sort({ due_date: 1 }).lean();
 
     res.json(tasks);
@@ -584,6 +577,7 @@ const generateNextOccurrence = async (parentTask) => {
     title: parentTask.title,
     description: parentTask.description,
     assigned_to: parentTask.assigned_to,
+    assignee_department: parentTask.assignee_department, // Propagate to new task
     assigned_by: parentTask.assigned_by,
     priority: parentTask.priority,
     due_date: nextDueDate.toISOString(),
@@ -592,7 +586,7 @@ const generateNextOccurrence = async (parentTask) => {
     is_recurring_active: true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    recurrence: { ...parentTask.recurrence, parent_task_id: parentTask.id },
+    // Fixed duplicate assignment bug here:
     recurrence: { ...parentTask.recurrence, parent_task_id: parentTask.id, occurrences_created: 0 }
   });
   await newTask.save();

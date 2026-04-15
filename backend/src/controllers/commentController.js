@@ -117,7 +117,7 @@ export const updateComment = async (req, res) => {
     const updated = await Comment.findOneAndUpdate(
       { id: req.params.comment_id },
       { content: req.body.content, is_edited: true },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     emitToTask(comment.task_id, 'comment_updated', { payload: updated });

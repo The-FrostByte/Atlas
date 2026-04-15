@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { toast } from 'sonner';
 
@@ -29,13 +29,14 @@ export function WebSocketProvider({ children }) {
       setIsConnected(false);
     });
 
-    // Listen for the events we defined in our Node controllers
+    // Listen for task assignment
     socketRef.current.on('task_assigned', (data) => {
       toast.info(data.message || 'New Task Assigned');
     });
 
-    socketRef.current.on('new_comment', (data) => {
-      toast.info(`New comment from ${data.author_name}`);
+    // ✅ FIXED: listen to correct event name + correct data shape
+    socketRef.current.on('comment_created', (data) => {
+      toast.info(`New comment from ${data.payload?.author?.name || 'someone'}`);
     });
 
   }, []);
@@ -49,7 +50,6 @@ export function WebSocketProvider({ children }) {
   }, []);
 
   const joinRoom = useCallback((room) => {
-    // Our Node backend uses 'join_task' event with just the ID
     const taskId = room.replace('task:', '');
     socketRef.current?.emit('join_task', taskId);
   }, []);
@@ -59,13 +59,21 @@ export function WebSocketProvider({ children }) {
     socketRef.current?.emit('leave_task', taskId);
   }, []);
 
-  // Standard subscription helper for components
+  // Subscription helper
   const subscribe = useCallback((event, handler) => {
     socketRef.current?.on(event, handler);
     return () => socketRef.current?.off(event, handler);
   }, []);
 
-  const value = { isConnected, connect, disconnect, joinRoom, leaveRoom, subscribe, notifications };
+  const value = useMemo(() => ({
+    isConnected,
+    connect,
+    disconnect,
+    joinRoom,
+    leaveRoom,
+    subscribe,
+    notifications
+  }), [isConnected, connect, disconnect, joinRoom, leaveRoom, subscribe, notifications]);
 
   return (
     <WebSocketContext.Provider value={value}>
@@ -88,14 +96,18 @@ export function useTaskRoom(taskId) {
 
     joinRoom(`task:${taskId}`);
 
-    // Listen for Node events
-    const unsubComment = subscribe('new_comment', (data) => {
-      setEvents(prev => [...prev, { type: 'comment_created', data: { payload: data.comment } }]);
+    // ✅ FIXED: correct event name + no unnecessary data reshaping
+    const unsubCommentCreated = subscribe('comment_created', (data) => {
+      setEvents(prev => [...prev, { type: 'comment_created', data }]);
     });
 
+    const unsubCommentUpdated = subscribe('comment_updated', (data) => {
+      setEvents(prev => [...prev, { type: 'comment_updated', data }]);
+    });
     return () => {
       leaveRoom(`task:${taskId}`);
-      unsubComment();
+      unsubCommentCreated();
+      unsubCommentUpdated();
     };
   }, [taskId, isConnected, joinRoom, leaveRoom, subscribe]);
 

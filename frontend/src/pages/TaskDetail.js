@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -81,11 +81,10 @@ export default function TaskDetail({ user }) {
       }
     });
     clearEvents();
-  }, [events]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [events, clearEvents]);
 
-  useEffect(() => { loadData(); }, [taskId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadData = async () => {
+  // STAFF FIX: Wrapped in useCallback and moved above the useEffect
+  const loadData = useCallback(async () => {
     try {
       const [taskRes, commentsRes, attachmentsRes, usersRes] = await Promise.all([
         api.get(`/tasks/${taskId}`),
@@ -107,7 +106,11 @@ export default function TaskDetail({ user }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [taskId, navigate]); // React now knows to recreate this ONLY if taskId or navigate changes
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]); // Safely track the memoized function
 
   const handleMentionSelect = useCallback((u) => {
     setMentionedUsers(prev => prev.some(x => x.id === u.id) ? prev : [...prev, u]);
@@ -116,11 +119,14 @@ export default function TaskDetail({ user }) {
   const handleSubmitComment = async () => {
     if (!newComment.trim()) return;
     try {
-      await api.post(`/tasks/${taskId}/comments`, {
+      const response = await api.post(`/tasks/${taskId}/comments`, {
         content: newComment,
         parent_comment_id: replyingTo,
         mentions: mentionedUsers.map(u => u.id)
       });
+
+      // Do NOT manually insert — WebSocket will handle it
+
       setNewComment('');
       setReplyingTo(null);
       setMentionedUsers([]);
@@ -261,15 +267,36 @@ export default function TaskDetail({ user }) {
   const getAttachmentIcon = (type) =>
     type === 'image' ? '🖼️' : type === 'video' ? '🎬' : type === 'audio' ? '🎵' : '📄';
 
-  const buildCommentTree = (comments) => {
-    const roots = comments.filter(c => !c.parent_comment_id);
-    const children = comments.filter(c => c.parent_comment_id);
+  const buildCommentTree = useCallback((commentsArray) => {
+    const roots = commentsArray.filter(c => !c.parent_comment_id);
+    const children = commentsArray.filter(c => c.parent_comment_id);
     const addReplies = (c) => ({
       ...c,
       replies: children.filter(r => r.parent_comment_id === c.id).map(addReplies)
     });
     return roots.map(addReplies);
-  };
+  }, []);
+
+  // STAFF FIX: Moved all hooks ABOVE early returns to satisfy React rules
+  const commentTree = useMemo(() => buildCommentTree(comments), [comments, buildCommentTree]);
+  const taskAttachments = useMemo(() => attachments.filter(a => !a.comment_id), [attachments]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!task) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">Task not found</p>
+        <Button variant="link" onClick={() => navigate('/tasks')}>Go back to tasks</Button>
+      </div>
+    );
+  }
 
   const renderComment = (comment, depth = 0) => {
     const isEditing = editingComment === comment.id;
@@ -347,30 +374,9 @@ export default function TaskDetail({ user }) {
     );
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
-  }
-
-  if (!task) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Task not found</p>
-        <Button variant="link" onClick={() => navigate('/tasks')}>Go back to tasks</Button>
-      </div>
-    );
-  }
-
   const assignedUser = users.find(u => u.id === task.assigned_to);
   const assignedByUser = users.find(u => u.id === task.assigned_by);
-  const commentTree = buildCommentTree(comments);
-  const taskAttachments = attachments.filter(a => !a.comment_id);
 
-  // ── RBAC for this page ──────────────────────────────────────────────────────
-  // canUploadAttachment: active task = any viewer; completed = admin only
   const uploadAllowed = canUploadAttachment(user, task);
 
   const getStatusColor = (status) => {
@@ -534,7 +540,6 @@ export default function TaskDetail({ user }) {
                     <Button variant="outline" size="sm" onClick={() => handleViewAttachment(att)}>View</Button>
                   )}
                   <Button variant="outline" size="sm" onClick={() => handleDownloadAttachment(att)}>Download</Button>
-                  {/* Delete: uploader or admin — checked by canDeleteAttachment */}
                   {canDeleteAttachment(user, att) && (
                     <Button variant="outline" size="sm"
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"

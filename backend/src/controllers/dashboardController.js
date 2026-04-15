@@ -163,6 +163,7 @@ export const getEmployeeLoadData = async (req, res) => {
     const employee_data = scopedUsers.map(u => {
       const stats = statsMap.get(u.id) || { total: 0, completed: 0, in_progress: 0, pending: 0, overdue: 0 };
       return {
+        id: u.id,
         name: u.name,
         department: u.department || 'General',
         total: stats.total,
