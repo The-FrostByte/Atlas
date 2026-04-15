@@ -15,13 +15,16 @@ const taskSchema = new mongoose.Schema({
     default: 'pending'
   },
   assigned_to: { type: String, required: true },
+
+  // N+1 OPTIMIZATION: Embed department to avoid joining User collection on read
+  assignee_department: { type: String, default: 'General' },
+
   assigned_by: { type: String, required: true },
   due_date: { type: String, required: true },
 
   is_recurring: { type: Boolean, default: false },
-  recurrence_pattern: { type: String, default: null }, // ADDED
+  recurrence_pattern: { type: String, default: null },
 
-  // FIXED: Aligned exactly with source data
   recurrence: {
     enabled: { type: Boolean, default: false },
     frequency: { type: String, enum: ['daily', 'weekly', 'monthly'] },
@@ -32,7 +35,7 @@ const taskSchema = new mongoose.Schema({
     max_occurrences: { type: Number },
     occurrences_created: { type: Number, default: 0 },
     next_run_at: { type: String },
-    parent_task_id: { type: String, default: null } // REPLACED parent_recurring_id
+    parent_task_id: { type: String, default: null }
   },
 
   recurrence_override: {

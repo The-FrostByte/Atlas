@@ -17,17 +17,21 @@ export const protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Get user from DB (excluding password) and attach to request
-      // We use 'id' to match your UUID logic in the Python code
-      req.user = await User.findOne({ id: decoded.user_id }).select('-password');
+      // FIXED: Enforce is_active check to lock out deactivated employees
+      req.user = await User.findOne({
+        id: decoded.user_id,
+        is_active: true
+      });
 
       if (!req.user) {
-        return res.status(401).json({ message: 'User not found' });
+        return res.status(401).json({ message: 'User not found or account is deactivated.' });
       }
 
       next();
     } catch (error) {
-      console.error('JWT Verification Error:', error.message);
+      if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({ message: 'Token expired', code: 'TOKEN_EXPIRED' });
+      }
       return res.status(401).json({ message: 'Not authorized, token failed' });
     }
   }

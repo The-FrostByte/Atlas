@@ -36,7 +36,16 @@ const resolveAssigneeId = (task) => {
 };
 
 const resolveAssigneeDept = (task, allUsers = []) => {
-  const at = task?.assigned_to;
+  if (!task) return null;
+
+  // STAFF FIX: Use the embedded department from our backend N+1 optimization!
+  // This completely bypasses the need to loop through the allUsers array.
+  if (task.assignee_department) {
+    return task.assignee_department;
+  }
+
+  // Fallback logic just in case an old task hasn't been updated in the DB
+  const at = task.assigned_to;
   if (!at) return null;
 
   // Already populated with department

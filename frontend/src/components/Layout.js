@@ -129,6 +129,184 @@ function NotificationItem({ n, onClick }) {
   );
 }
 
+// ─── STAFF EXTRACTED COMPONENT: EditProfileDialog ──────────────────────────────
+function EditProfileDialog({ isOpen, onClose, user, onSaveSuccess }) {
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [departments, setDepartments] = useState([]);
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', department: '', role: 'member' });
+
+  const isAdmin = user?.role === 'admin';
+
+  useEffect(() => {
+    if (isOpen) {
+      setEditForm({
+        name: user?.name || '',
+        email: user?.email || '',
+        phone: user?.phone || '',
+        department: user?.department || '',
+        role: user?.role || 'member',
+      });
+      if (departments.length === 0) {
+        api.get('/departments').then(r => setDepartments(r.data)).catch(() => { });
+      }
+    }
+  }, [isOpen, user, departments.length]);
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    try {
+      const res = await api.post(`/users/${user.id}/avatar`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast.success('Profile picture updated!');
+      onSaveSuccess(res.data.user);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to upload picture');
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleProfileSave = async () => {
+    if (!isAdmin) {
+      onClose();
+      return;
+    }
+
+    if (!editForm.name.trim()) { toast.error('Name is required'); return; }
+    if (!editForm.email && !editForm.phone) { toast.error('At least email or phone is required'); return; }
+
+    setSavingProfile(true);
+    try {
+      const res = await api.put(`/users/${user.id}`, editForm);
+      toast.success('Profile updated successfully');
+      onSaveSuccess(res.data);
+    } catch (err) {
+      if (err.response?.status === 403) toast.error('Only admins can update user profiles');
+      else toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><UserCircle className="h-5 w-5 text-primary" />Edit Profile</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">{isAdmin ? 'All fields are editable.' : 'Personal details are managed by HR. You may only update your profile picture.'}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+
+          {/* Avatar Upload Section */}
+          <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 border border-border/50">
+            <div className="relative group cursor-pointer">
+              <label htmlFor="avatar-upload" className="cursor-pointer">
+                {user?.profile_picture ? (
+                  <img
+                    src={`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}${user.profile_picture}`}
+                    alt="Profile"
+                    className="h-14 w-14 rounded-2xl object-cover ring-2 ring-primary/20"
+                  />
+                ) : (
+                  <div className="h-14 w-14 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0 ring-2 ring-primary/20">
+                    <span className="text-xl font-bold text-primary">{getInitials(user?.name)}</span>
+                  </div>
+                )}
+
+                {/* Hover Overlay */}
+                <div className="absolute inset-0 rounded-2xl bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  {uploadingAvatar ? <Loader2 className="h-5 w-5 text-white animate-spin" /> : <Pencil className="h-5 w-5 text-white" />}
+                </div>
+              </label>
+              <input
+                id="avatar-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarUpload}
+                disabled={uploadingAvatar}
+              />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">{user?.name}</p>
+              <p className="text-xs text-muted-foreground capitalize">{user?.role} · {user?.department}</p>
+              <p className="text-[10px] text-muted-foreground/70 mt-0.5">Click picture to change</p>
+            </div>
+          </div>
+
+          {/* Text Fields */}
+          {[['edit-name', 'Full Name *', 'name', 'text', 'Your full name'], ['edit-email', 'Email', 'email', 'email', 'email@company.com'], ['edit-phone', 'Phone', 'phone', 'tel', '+1 234 567 8900']].map(([id, label, field, type, placeholder]) => (
+            <div key={id} className="space-y-1.5">
+              <Label htmlFor={id} className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                {label} {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}
+              </Label>
+              <Input
+                id={id}
+                type={type}
+                value={editForm[field]}
+                placeholder={placeholder}
+                onChange={e => setEditForm(f => ({ ...f, [field]: e.target.value }))}
+                disabled={!isAdmin} // Lock down for standard users
+                className={!isAdmin ? "opacity-70 bg-muted/30 cursor-not-allowed" : ""}
+              />
+            </div>
+          ))}
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">Department {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}</Label>
+            {isAdmin ? (
+              <Select value={editForm.department} onValueChange={v => setEditForm(f => ({ ...f, department: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                <SelectContent>{departments.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}</SelectContent>
+              </Select>
+            ) : (
+              <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground opacity-70 cursor-not-allowed"><Building2 className="h-3.5 w-3.5" />{editForm.department || '—'}</div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">Role {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}</Label>
+            {isAdmin ? (
+              <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="member">Member</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent>
+              </Select>
+            ) : (
+              <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground capitalize opacity-70 cursor-not-allowed"><ShieldCheck className="h-3.5 w-3.5" />{editForm.role || '—'}</div>
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" className="flex-1" onClick={onClose} disabled={savingProfile || uploadingAvatar}>
+              {isAdmin ? "Cancel" : "Close"}
+            </Button>
+            {isAdmin && (
+              <Button className="flex-1" onClick={handleProfileSave} disabled={savingProfile || uploadingAvatar}>
+                {savingProfile ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</> : <><Save className="h-4 w-4 mr-2" />Save Changes</>}
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 export default function Layout({ user, children }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -148,39 +326,12 @@ export default function Layout({ user, children }) {
   const [localUser, setLocalUser] = useState(user);
   const [profileOpen, setProfileOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [departments, setDepartments] = useState([]);
-  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', department: '', role: '' });
 
   useEffect(() => { setLocalUser(user); }, [user]);
 
-  useEffect(() => {
-    if (editOpen && departments.length === 0) {
-      api.get('/departments').then(r => setDepartments(r.data)).catch(() => { });
-    }
-  }, [editOpen]);
-
   const openEditDialog = () => {
-    setEditForm({
-      name: localUser?.name || '', email: localUser?.email || '', phone: localUser?.phone || '',
-      department: localUser?.department || '', role: localUser?.role || 'member',
-    });
-    setProfileOpen(false); setEditOpen(true);
-  };
-
-  const handleProfileSave = async () => {
-    if (!editForm.name.trim()) { toast.error('Name is required'); return; }
-    if (!editForm.email && !editForm.phone) { toast.error('At least email or phone is required'); return; }
-    setSavingProfile(true);
-    try {
-      const res = await api.put(`/users/${localUser.id}`, editForm);
-      setLocalUser(res.data);
-      toast.success('Profile updated successfully');
-      setEditOpen(false);
-    } catch (err) {
-      if (err.response?.status === 403) toast.error('Only admins can update user profiles');
-      else toast.error(err.response?.data?.message || 'Failed to update profile');
-    } finally { setSavingProfile(false); }
+    setProfileOpen(false);
+    setEditOpen(true);
   };
 
   useEffect(() => {
@@ -194,9 +345,8 @@ export default function Layout({ user, children }) {
   useEffect(() => {
     loadNotifications();
 
-    // Safety net: if DigestPopup fails to fire for any reason, unlock after 3 seconds.
     const fallbackTimer = setTimeout(() => {
-      if (!digestFinished) setDigestFinished(true);
+      setDigestFinished(prev => prev ? prev : true);
     }, 3000);
 
     const handleDigestFinished = (e) => {
@@ -214,7 +364,6 @@ export default function Layout({ user, children }) {
 
   // 2. SEQUENCED WELCOME BACK POPUP
   useEffect(() => {
-    // Only evaluate IF digest is finished, notifications are loaded, and we are on dashboard
     if (isFirstCheckDone && digestFinished && location.pathname === '/') {
       const evaluated = sessionStorage.getItem('welcome_notifs_evaluated');
       if (!evaluated) {
@@ -222,9 +371,7 @@ export default function Layout({ user, children }) {
         const unread = notifications.filter(n => !n.is_read);
 
         if (unread.length > 0) {
-          // Elegant breather: 1.5 seconds if they just dismissed a digest, 600ms if not.
           const delay = digestWasShown ? 1500 : 600;
-
           setTimeout(() => {
             if (window.location.pathname === '/') {
               setPopupState({ show: true, mode: 'welcome', activeNotif: null });
@@ -235,14 +382,12 @@ export default function Layout({ user, children }) {
     }
   }, [isFirstCheckDone, digestFinished, digestWasShown, location.pathname, notifications]);
 
-  // 3. WEBSOCKET REAL-TIME LISTENER (Fresh Notification Override)
+  // 3. WEBSOCKET REAL-TIME LISTENER
   useEffect(() => {
     const handleNewNotification = (newNotif) => {
       setNotifications(prev => [newNotif, ...prev]);
       if (!globalShownToastIds.has(newNotif.id)) {
         globalShownToastIds.add(newNotif.id);
-
-        // Instantly overrides and shows the new notification
         setPopupState({ show: true, mode: 'fresh', activeNotif: newNotif });
       }
     };
@@ -293,7 +438,6 @@ export default function Layout({ user, children }) {
   const unreadCount = notifications.filter(n => !n.is_read).length;
   const initials = getInitials(localUser?.name);
   const roleStyle = ROLE_STYLES[localUser?.role] || ROLE_STYLES.member;
-  const isAdmin = localUser?.role === 'admin';
 
   const sidebarSharedProps = {
     menuItems, currentPath: location.pathname, onNavigate: (path) => navigate(path),
@@ -308,13 +452,11 @@ export default function Layout({ user, children }) {
       <AnimatePresence>
         {popupState.show && (
           <div className="relative z-[150]">
-            {/* Blurred Backdrop */}
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="fixed inset-0 bg-background/80 backdrop-blur-sm"
               onClick={() => setPopupState({ ...popupState, show: false })}
             />
-            {/* Centered Modal */}
             <div className="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -323,7 +465,6 @@ export default function Layout({ user, children }) {
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 className="bg-card w-full max-w-md rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] border border-border/50 overflow-hidden pointer-events-auto flex flex-col max-h-[85vh] ring-1 ring-primary/20"
               >
-                {/* Header */}
                 <div className={`p-6 relative shrink-0 ${popupState.mode === 'welcome' ? 'bg-gradient-to-br from-primary/15 via-primary/5 to-transparent' : 'bg-gradient-to-br from-blue-500/15 via-blue-500/5 to-transparent'}`}>
                   <button onClick={() => setPopupState({ ...popupState, show: false })} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground bg-background/50 rounded-full p-1 transition-colors">
                     <X className="h-4 w-4" />
@@ -348,7 +489,6 @@ export default function Layout({ user, children }) {
                   )}
                 </div>
 
-                {/* SCROLLABLE CONTENT AREA - FIXED WITH NATIVE SCROLL DIV */}
                 <div className="flex-1 overflow-y-auto p-3 bg-muted/10 min-h-0 custom-scrollbar">
                   <div className="space-y-1.5">
                     {popupState.mode === 'welcome'
@@ -362,7 +502,6 @@ export default function Layout({ user, children }) {
                   </div>
                 </div>
 
-                {/* Empathetic Rain-Check Footer */}
                 <div className="p-4 border-t border-border/50 bg-background flex gap-3 shrink-0">
                   <Button variant="outline" className="flex-1" onClick={() => setPopupState({ ...popupState, show: false })}>
                     I'll review later
@@ -382,7 +521,6 @@ export default function Layout({ user, children }) {
           </div>
         )}
       </AnimatePresence>
-      {/* ─────────────────────────────────────── */}
 
       <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
         <div className="px-4 h-16 flex items-center justify-between gap-4">
@@ -452,7 +590,6 @@ export default function Layout({ user, children }) {
                   </div>
                   {unreadCount > 0 && <button onClick={markAllAsRead} disabled={markingAll} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"><CheckCheck className="h-3.5 w-3.5" />{markingAll ? 'Marking…' : 'Mark all read'}</button>}
                 </div>
-                {/* Regular bell popover uses a fixed height ScrollArea which works fine */}
                 <ScrollArea className="h-[320px]">
                   {notifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 gap-2">
@@ -478,19 +615,39 @@ export default function Layout({ user, children }) {
             <div className="h-5 w-px bg-border/60 mx-1" />
 
             <Popover open={profileOpen} onOpenChange={setProfileOpen}>
+              {/* STAFF FIX: Updated Navbar Trigger Button to show Image */}
               <PopoverTrigger asChild>
-                <button className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0 select-none hover:bg-primary/25 hover:ring-2 hover:ring-primary/30 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
-                  <span className="text-[11px] font-bold text-primary">{initials}</span>
+                <button className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0 select-none hover:bg-primary/25 hover:ring-2 hover:ring-primary/30 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 overflow-hidden">
+                  {localUser?.profile_picture ? (
+                    <img
+                      src={`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}${localUser.profile_picture}`}
+                      alt="Profile"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-[11px] font-bold text-primary">{initials}</span>
+                  )}
                 </button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-[300px] p-0 overflow-hidden rounded-2xl shadow-2xl border border-border/60">
                 <div className="relative">
                   <div className="h-16 bg-gradient-to-br from-primary/20 via-primary/10 to-transparent" />
+
+                  {/* STAFF FIX: Updated Popover Content to show Image */}
                   <div className="absolute left-4 -bottom-6">
-                    <div className="h-14 w-14 rounded-2xl bg-primary/20 border-4 border-background flex items-center justify-center shadow-md">
-                      <span className="text-lg font-bold text-primary">{initials}</span>
-                    </div>
+                    {localUser?.profile_picture ? (
+                      <img
+                        src={`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}${localUser.profile_picture}`}
+                        alt="Profile"
+                        className="h-14 w-14 rounded-2xl border-4 border-background object-cover shadow-md bg-card"
+                      />
+                    ) : (
+                      <div className="h-14 w-14 rounded-2xl bg-primary/20 border-4 border-background flex items-center justify-center shadow-md">
+                        <span className="text-lg font-bold text-primary">{initials}</span>
+                      </div>
+                    )}
                   </div>
+
                   <div className="absolute right-3 top-3">
                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full capitalize ${roleStyle}`}>{localUser?.role}</span>
                   </div>
@@ -515,57 +672,15 @@ export default function Layout({ user, children }) {
         </div>
       </header>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><UserCircle className="h-5 w-5 text-primary" />Edit Profile</DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">{isAdmin ? 'All fields are editable.' : 'Department and role changes require an admin.'}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 border border-border/50">
-              <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0">
-                <span className="text-lg font-bold text-primary">{getInitials(editForm.name || localUser?.name)}</span>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">{editForm.name || localUser?.name}</p>
-                <p className="text-xs text-muted-foreground capitalize">{editForm.role} · {editForm.department}</p>
-              </div>
-            </div>
-            {[['edit-name', 'Full Name *', 'name', 'text', 'Your full name'], ['edit-email', 'Email', 'email', 'email', 'email@company.com'], ['edit-phone', 'Phone', 'phone', 'tel', '+1 234 567 8900']].map(([id, label, field, type, placeholder]) => (
-              <div key={id} className="space-y-1.5">
-                <Label htmlFor={id} className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</Label>
-                <Input id={id} type={type} value={editForm[field]} placeholder={placeholder} onChange={e => setEditForm(f => ({ ...f, [field]: e.target.value }))} />
-              </div>
-            ))}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">Department {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}</Label>
-              {isAdmin ? (
-                <Select value={editForm.department} onValueChange={v => setEditForm(f => ({ ...f, department: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                  <SelectContent>{departments.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}</SelectContent>
-                </Select>
-              ) : (
-                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground"><Building2 className="h-3.5 w-3.5" />{editForm.department || '—'}</div>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">Role {!isAdmin && <span className="text-[10px] font-normal text-muted-foreground/60 normal-case">(admin only)</span>}</Label>
-              {isAdmin ? (
-                <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="member">Member</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent>
-                </Select>
-              ) : (
-                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/30 text-sm text-muted-foreground capitalize"><ShieldCheck className="h-3.5 w-3.5" />{editForm.role || '—'}</div>
-              )}
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setEditOpen(false)} disabled={savingProfile}>Cancel</Button>
-              <Button className="flex-1" onClick={handleProfileSave} disabled={savingProfile}>{savingProfile ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</> : <><Save className="h-4 w-4 mr-2" />Save Changes</>}</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EditProfileDialog
+        isOpen={editOpen}
+        onClose={() => setEditOpen(false)}
+        user={localUser}
+        onSaveSuccess={(updatedUser) => {
+          setLocalUser(updatedUser);
+          setEditOpen(false);
+        }}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         <AnimatePresence>

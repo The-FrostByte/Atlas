@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios'; // STAFF FIX: Added for axios.isCancel check
 import {
   Plus, Edit, Trash2, Bell, BellOff, AlertCircle, Info,
   Repeat, Calendar, Upload, Paperclip, Check, Lock, Eye,
@@ -281,6 +282,7 @@ export default function TaskList({ user }) {
   const [createdTo, setCreatedTo] = useState('');
   const [filterAssignedTo, setFilterAssignedTo] = useState('');
   const [filterAssignedBy, setFilterAssignedBy] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [parentRecurringOnly, setParentRecurringOnly] = useState(false);
   const [sortOption, setSortOption] = useState('created_at_desc');
@@ -302,19 +304,32 @@ export default function TaskList({ user }) {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const statusParam = params.get('status');
+    const assignedToParam = params.get('assigned_to');
+    const departmentParam = params.get('department');
+
+    let filtersTriggered = false;
+
     if (statusParam) setFilterStatus(statusParam);
+
+    if (assignedToParam) {
+      setFilterAssignedTo(assignedToParam);
+      filtersTriggered = true;
+    }
+
+    if (departmentParam) {
+      setFilterDepartment(departmentParam);
+      filtersTriggered = true;
+    }
+
+    if (filtersTriggered) setShowAdvancedFilters(true);
+
     loadUsers();
     loadGlobalRecurrenceSettings();
     loadGlobalNotificationSettings();
   }, [location]);
 
-  useEffect(() => {
-    loadTasks();
-  }, [filterStatus, myTasksOnly, searchQuery, selectedStatuses, selectedPriorities,
-    dueDateFrom, dueDateTo, createdFrom, createdTo, filterAssignedTo, filterAssignedBy,
-    overdueOnly, parentRecurringOnly, sortOption, pagination.page]);
-
-  const loadTasks = async () => {
+  // STAFF FIX: Memoize loadTasks to satisfy ESLint and prevent Race Conditions with AbortController
+  const loadTasks = useCallback(async (signal) => {
     try {
       setLoading(true);
       const params = { page: pagination.page, limit: pagination.limit, sort: sortOption };
@@ -331,19 +346,37 @@ export default function TaskList({ user }) {
 
       if (filterAssignedTo) params.assigned_to = filterAssignedTo;
       if (filterAssignedBy) params.assigned_by = filterAssignedBy;
+      if (filterDepartment) params.department = filterDepartment;
       if (overdueOnly || filterStatus === 'delayed') params.overdue = 'true';
       if (parentRecurringOnly) params.parent_recurring_only = 'true';
 
-      const response = await api.get('/tasks', { params });
+      const response = await api.get('/tasks', { params, signal });
       if (response.data.tasks) {
         setTasks(response.data.tasks);
         setPagination(prev => ({ ...prev, ...response.data.pagination }));
       } else {
         setTasks(response.data);
       }
-    } catch { toast.error('Failed to load tasks'); }
-    finally { setLoading(false); }
-  };
+      setLoading(false);
+    } catch (error) {
+      if (!axios.isCancel(error)) {
+        toast.error('Failed to load tasks');
+        setLoading(false);
+      }
+    }
+  }, [
+    pagination.page, pagination.limit, sortOption, myTasksOnly, searchQuery,
+    selectedStatuses, filterStatus, selectedPriorities, dueDateFrom, dueDateTo,
+    createdFrom, createdTo, filterAssignedTo, filterAssignedBy, filterDepartment,
+    overdueOnly, parentRecurringOnly
+  ]);
+
+  // STAFF FIX: Use AbortController on every filter change dependency
+  useEffect(() => {
+    const controller = new AbortController();
+    loadTasks(controller.signal);
+    return () => controller.abort();
+  }, [loadTasks]);
 
   const loadUsers = async () => {
     try {
@@ -437,7 +470,7 @@ export default function TaskList({ user }) {
       }
       setIsDialogOpen(false);
       resetForm();
-      loadTasks();
+      loadTasks(); // Manual refresh triggers safely without abort signal
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to save task');
     }
@@ -659,6 +692,7 @@ export default function TaskList({ user }) {
     setFilterAssignedTo(''); setFilterAssignedBy('');
     setOverdueOnly(false); setParentRecurringOnly(false); setMyTasksOnly(false);
     setFilterStatus('all'); setSortOption('created_at_desc');
+    setFilterDepartment('');
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
@@ -703,6 +737,9 @@ export default function TaskList({ user }) {
     if (filterAssignedBy) { const u = users.find(x => x.id === filterAssignedBy); chips.push({ key: 'assignedBy', label: `By: ${u?.name || 'Unknown'}`, onRemove: () => setFilterAssignedBy('') }); }
     if (overdueOnly) chips.push({ key: 'overdue', label: 'Overdue Only', onRemove: () => setOverdueOnly(false) });
     if (parentRecurringOnly) chips.push({ key: 'parentRecurring', label: 'Recurring Parents', onRemove: () => setParentRecurringOnly(false) });
+    if (filterDepartment) {
+      chips.push({ key: 'department', label: `Dept: ${filterDepartment}`, onRemove: () => setFilterDepartment('') });
+    };
     return chips;
   };
 

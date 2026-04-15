@@ -1,46 +1,59 @@
 import User from '../models/User.js';
-import { sendWhatsApp } from '../services/whatsappService.js';
-import OTP from '../models/OTP.js'; // Import the OTP model we created earlier
+import OTP from '../models/OTP.js';
 import { generateToken } from '../utils/auth.js';
-import crypto from 'crypto'; // Built-in Node tool for random numbers
+// NEW: Import necessary security libraries
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
-// Mock DB for OTPs (or use a dedicated collection like your Python 'otp_codes')
-// For production-level, we'll use a Mongoose model for OTPs later
 export const sendOTP = async (req, res) => {
   const { email, phone } = req.body;
+
   try {
-    // Clean the input: remove accidental spaces and make the search case-insensitive
     const query = email
       ? { email: { $regex: new RegExp(`^${email.trim()}$`, 'i') } }
       : { phone: phone.trim() };
 
-    console.log(`[AUTH] Looking up user with:`, query);
-
     const user = await User.findOne(query);
 
     if (!user) {
-      console.log(`[AUTH FAILED] User not found in database.`);
+      // SECURITY: In an internal app, 404 is okay. For public apps, always return 200 
+      // to prevent "User Enumeration" attacks.
       return res.status(404).json({ message: "User not found" });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // 1. SECURE RANDOMNESS: Replaced Math.random()
+    const otp = crypto.randomInt(100000, 1000000).toString();
 
-    // DELETE old OTPs for this user first so only the latest works
-    await OTP.deleteMany(query);
+    // 2. SECURE STORAGE: Hash the OTP before saving
+    const salt = await bcrypt.genSalt(10);
+    const hashedOtp = await bcrypt.hash(otp, salt);
 
-    // SAVE the new OTP to MongoDB
-    await OTP.create({
-      email: user.email || undefined, // use the DB's clean email
-      phone: user.phone || undefined,
-      otp: otp
-    });
+    // 3. ATOMIC UPSERT: Replaced deleteMany() + create() to prevent race conditions
+    await OTP.findOneAndUpdate(
+      query,
+      {
+        email: user.email || undefined,
+        phone: user.phone || undefined,
+        otp: hashedOtp,
+        createdAt: Date.now() // Reset the TTL index timer
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
 
-    console.log(`[DATABASE] OTP Saved for ${user.email || user.phone}: ${otp}`);
+    console.log(`[DATABASE] Secure OTP generated for ${user.email || user.phone}`);
 
-    res.json({ message: "OTP sent", otp_for_testing: otp });
+    // TODO: Actually send the OTP via WhatsApp/Email here
+
+    // 4. PREVENT LEAKS: Only expose the OTP in development mode
+    const responsePayload = { message: "OTP sent successfully" };
+    if (process.env.NODE_ENV === 'development') {
+      responsePayload.otp_for_testing = otp;
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error(`[AUTH ERROR]`, error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Internal server error" }); // Don't leak error.message to client
   }
 };
 
@@ -48,25 +61,29 @@ export const verifyOTP = async (req, res) => {
   const { email, phone, otp } = req.body;
 
   try {
-    // Ensure OTP is treated as a string for the database query
+    if (!otp) return res.status(400).json({ message: "OTP is required" });
+
     const otpString = otp.toString();
     const query = email ? { email } : { phone };
 
-    // Search for the record
-    const otpRecord = await OTP.findOne({
-      ...query,
-      otp: otpString
-    });
+    // 1. Find the OTP record
+    const otpRecord = await OTP.findOne(query);
 
     if (!otpRecord) {
-      return res.status(400).json({
-        message: "Invalid or expired OTP",
-        debug_info: { attempted_otp: otpString, query } // Optional debug
-      });
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    // 2. SECURE COMPARISON: Compare user input against the hashed OTP
+    const isMatch = await bcrypt.compare(otpString, otpRecord.otp);
+
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
     const user = await User.findOne(query);
-    await OTP.deleteMany(query); // Clear all OTPs for this user after success
+
+    // 3. CLEANUP: Clear the OTP so it cannot be reused
+    await OTP.deleteMany(query);
 
     const token = generateToken(user.id);
 
@@ -76,6 +93,7 @@ export const verifyOTP = async (req, res) => {
       user: { id: user.id, name: user.name, role: user.role }
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error(`[VERIFY ERROR]`, error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };

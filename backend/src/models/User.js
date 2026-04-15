@@ -34,6 +34,11 @@ const userSchema = new mongoose.Schema({
     default: 'member'
   },
 
+  profile_picture: {
+    type: String,
+    default: null
+  },
+
   // ❌ REMOVE THIS (you are using OTP)
   // password: { type: String, required: true }
 
